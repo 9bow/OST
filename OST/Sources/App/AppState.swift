@@ -188,28 +188,32 @@ final class AppState: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] currentText in
                 guard let self else { return }
+
+                // Handle recognizer restart (currentText cleared) BEFORE updating liveText
+                if currentText.isEmpty {
+                    if !self.liveText.isEmpty {
+                        self.consumeRemainingText()
+                    }
+                    self.lastConsumedPartial = ""
+                    self.liveText = ""
+                    self.speechPauseTimer?.invalidate()
+                    self.speechPauseTimer = nil
+                    return
+                }
+
                 // Show only the unconsumed portion as live text
                 if !self.lastConsumedPartial.isEmpty && currentText.hasPrefix(self.lastConsumedPartial) {
                     self.liveText = String(currentText.dropFirst(self.lastConsumedPartial.count)).trimmingCharacters(in: .whitespaces)
                 } else if self.lastConsumedPartial.isEmpty {
                     self.liveText = currentText
                 } else {
-                    // currentText was reset (recognizer restarted) — start fresh
+                    // currentText was reset with new content (e.g. language change)
                     self.lastConsumedPartial = ""
                     self.liveText = currentText
                 }
+
                 self.detectLanguageIfNeeded(currentText)
-                if currentText.isEmpty {
-                    // Recognition ended/restarted — consume any remaining text
-                    if !self.liveText.isEmpty {
-                        self.consumeRemainingText()
-                    }
-                    self.lastConsumedPartial = ""
-                    self.speechPauseTimer?.invalidate()
-                    self.speechPauseTimer = nil
-                } else {
-                    self.resetSpeechPauseTimer()
-                }
+                self.resetSpeechPauseTimer()
             }
             .store(in: &cancellables)
     }
