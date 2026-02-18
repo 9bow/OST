@@ -1,0 +1,32 @@
+name: OST
+options:
+  bundleIdPrefix: com.ost
+  deploymentTarget:
+    macOS: "15.0"
+  xcodeVersion: "16.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+
+targets:
+  OST:
+    type: application
+    platform: macOS
+    sources:
+      - path: OST/Sources
+    resources:
+      - path: OST/Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ost.on-screen-translator
+        INFOPLIST_FILE: OST/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: OST/Resources/OST.entitlements
+        PRODUCT_NAME: OST
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: false
+        SWIFT_EMIT_LOC_STRINGS: "YES"
+    entitlements:
+      path: OST/Resources/OST.entitlements

@@ -1,0 +1,20 @@
+# Build output
+build/
+
+# Xcode
+OST.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+
+# macOS
+.DS_Store
+
+# Reference project (not part of OST)
+ref-project/
+
+# OMC state
+.omc/
+
+# Claude Code
+CLAUDE.md
