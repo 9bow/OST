@@ -213,6 +213,8 @@ final class AppState: ObservableObject {
                 }
 
                 self.detectLanguageIfNeeded(currentText)
+                // Extract completed sentences immediately (triggered by punctuation)
+                self.extractCompleteSentences()
                 self.resetSpeechPauseTimer()
             }
             .store(in: &cancellables)
@@ -228,32 +230,71 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// When partial recognition text hasn't changed for the configured pause duration, treat it as a completed segment.
+    /// When partial recognition text hasn't changed for the configured pause duration, consume it.
     private func handlePartialTextStabilized() {
-        let fullText = speechRecognizer.currentText
-        guard !fullText.isEmpty, fullText != lastConsumedPartial, isCapturing else { return }
+        guard !liveText.isEmpty, isCapturing else { return }
 
-        // Extract only the NEW portion since last consumption
-        let newText: String
-        if !lastConsumedPartial.isEmpty && fullText.hasPrefix(lastConsumedPartial) {
-            newText = String(fullText.dropFirst(lastConsumedPartial.count)).trimmingCharacters(in: .whitespaces)
-        } else {
-            newText = fullText
-        }
-        lastConsumedPartial = fullText
-
-        guard !newText.isEmpty else { return }
-
-        AppLogger.shared.log("Partial text stabilized: \"\(newText)\"", category: .speech)
+        let text = liveText
         liveText = ""
+        lastConsumedPartial = speechRecognizer.currentText
 
-        let chunks = splitIntoChunks(newText)
+        AppLogger.shared.log("Pause-triggered consume: \"\(text)\"", category: .speech)
+
+        let chunks = splitIntoChunks(text)
         for sentence in chunks {
             let entry = SubtitleEntry(timestamp: Date(), recognized: sentence, isFinal: true)
             subtitleEntries.append(entry)
             translateEntry(id: entry.id, text: sentence)
         }
         trimEntries()
+    }
+
+    /// Extracts completed sentences from liveText when punctuation boundaries are detected.
+    private func extractCompleteSentences() {
+        guard !liveText.isEmpty, isCapturing else { return }
+
+        // Split liveText into sentences using linguistic analysis
+        var sentenceRanges: [Range<String.Index>] = []
+        liveText.enumerateSubstrings(in: liveText.startIndex..., options: .bySentences) { _, range, _, _ in
+            sentenceRanges.append(range)
+        }
+
+        // Need 2+ sentences: all but last are complete, last is in-progress
+        guard sentenceRanges.count >= 2 else { return }
+
+        let lastStart = sentenceRanges.last!.lowerBound
+        let completedText = String(liveText[..<lastStart])
+        let remaining = String(liveText[lastStart...]).trimmingCharacters(in: .whitespaces)
+
+        // Extract individual sentences from the completed portion
+        var sentences: [String] = []
+        completedText.enumerateSubstrings(in: completedText.startIndex..., options: .bySentences) { sub, _, _, _ in
+            if let s = sub?.trimmingCharacters(in: .whitespaces), !s.isEmpty {
+                sentences.append(s)
+            }
+        }
+        guard !sentences.isEmpty else { return }
+
+        for sentence in sentences {
+            let entry = SubtitleEntry(timestamp: Date(), recognized: sentence, isFinal: true)
+            subtitleEntries.append(entry)
+            translateEntry(id: entry.id, text: sentence)
+        }
+        trimEntries()
+
+        // Update tracking: lastConsumedPartial = fullText minus remaining
+        let fullText = speechRecognizer.currentText
+        if remaining.isEmpty {
+            lastConsumedPartial = fullText
+        } else if let range = fullText.range(of: remaining, options: .backwards) {
+            lastConsumedPartial = String(fullText[..<range.lowerBound])
+        } else {
+            lastConsumedPartial = fullText
+        }
+
+        liveText = remaining
+        resetSpeechPauseTimer()
+        AppLogger.shared.log("Sentence-triggered: extracted \(sentences.count) sentence(s)", category: .speech)
     }
 
     /// Consumes any remaining live text into subtitle entries when the recognizer restarts.
@@ -271,17 +312,12 @@ final class AppState: ObservableObject {
         trimEntries()
     }
 
-    /// Translates a subtitle entry with context from recent entries for consistency.
+    /// Translates a subtitle entry individually.
     private func translateEntry(id: UUID, text: String) {
-        let recentContext = subtitleEntries
-            .filter { $0.id != id && !$0.recognized.isEmpty }
-            .suffix(2)
-            .map { $0.recognized }
-
         Task { [weak self] in
             guard let self else { return }
             do {
-                let result = try await self.translationService.translateWithContext(text, context: Array(recentContext))
+                let result = try await self.translationService.translate(text)
                 if let idx = self.subtitleEntries.firstIndex(where: { $0.id == id }) {
                     self.subtitleEntries[idx].translated = result
                     AppLogger.shared.log("Translated: \(text) → \(result)", category: .translation)
