@@ -27,6 +27,14 @@ final class WindowManager: ObservableObject {
         overlayWindow?.updateLockState(locked: locked)
     }
 
+    func resetOverlay(settings: UserSettings) {
+        settings.overlayLocked = true
+        overlayWindow?.resetFrame()
+        overlayWindow?.updateLockState(locked: true)
+        // Set AFTER resetFrame() because didResizeNotification triggers persistFrame()
+        settings.overlayFrameSaved = false
+    }
+
     func hideOverlay() {
         overlayWindow?.orderOut(nil)
         overlayWindow = nil
@@ -40,7 +48,13 @@ final class WindowManager: ObservableObject {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let view = SettingsView(settings: settings, onOpenLogs: onOpenLogs, onOpenSessions: onOpenSessions)
+        let view = SettingsView(
+            settings: settings,
+            onOpenLogs: onOpenLogs,
+            onOpenSessions: onOpenSessions,
+            onResetOverlay: { [weak self] in self?.resetOverlay(settings: settings) },
+            onToggleOverlayLock: { [weak self] locked in self?.updateOverlayLock(locked: locked) }
+        )
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
             styleMask: [.titled, .closable, .miniaturizable],

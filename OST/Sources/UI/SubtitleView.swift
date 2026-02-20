@@ -8,38 +8,37 @@ struct SubtitleView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            Spacer(minLength: 0)
+
             ForEach(appState.subtitleEntries) { entry in
                 subtitleRow(entry)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .bottom)),
-                        removal: .opacity
-                    ))
+                    .transition(.opacity)
             }
 
-            // Show live partial text (not yet finalized)
-            if !appState.liveText.isEmpty {
-                if settings.showOriginalText {
-                    Text(appState.liveText)
-                        .font(.system(size: settings.fontSize))
-                        .foregroundColor(settings.fontColor.opacity(0.6))
-                }
+            if !appState.liveText.isEmpty && settings.showOriginalText {
+                Text(appState.liveText)
+                    .font(.system(size: settings.fontSize))
+                    .foregroundColor(settings.fontColor.opacity(0.6))
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        .clipped()
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(settings.backgroundColor.opacity(settings.backgroundOpacity))
         )
-        .animation(.easeInOut(duration: 0.2), value: appState.subtitleEntries.count)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-        .background(
+        .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color.black.opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                .stroke(
+                    settings.overlayLocked
+                        ? Color.white.opacity(0.15)
+                        : Color.accentColor.opacity(0.6),
+                    lineWidth: settings.overlayLocked ? 1 : 2
                 )
         )
+        .animation(.easeInOut(duration: 0.2), value: appState.subtitleEntries.count)
         .translationTask(translationService.configuration) { session in
             AppLogger.shared.log("Translation session delivered by .translationTask", category: .translation)
             translationService.handleSession(session)

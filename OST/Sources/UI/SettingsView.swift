@@ -4,10 +4,12 @@ struct SettingsView: View {
     @ObservedObject var settings: UserSettings
     let onOpenLogs: () -> Void
     let onOpenSessions: () -> Void
+    var onResetOverlay: (() -> Void)?
+    var onToggleOverlayLock: ((Bool) -> Void)?
 
     var body: some View {
         TabView {
-            FontSettingsView(settings: settings)
+            FontSettingsView(settings: settings, onResetOverlay: onResetOverlay, onToggleOverlayLock: onToggleOverlayLock)
                 .tabItem {
                     Label("Display", systemImage: "textformat.size")
                 }

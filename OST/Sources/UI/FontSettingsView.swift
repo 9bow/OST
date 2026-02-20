@@ -2,6 +2,8 @@ import SwiftUI
 
 struct FontSettingsView: View {
     @ObservedObject var settings: UserSettings
+    var onResetOverlay: (() -> Void)?
+    var onToggleOverlayLock: ((Bool) -> Void)?
 
     var body: some View {
         Form {
@@ -102,6 +104,27 @@ struct FontSettingsView: View {
                 Toggle("Show Translation", isOn: $settings.showTranslation)
                     .accessibilityLabel("Show translation toggle")
                     .accessibilityHint("Toggle display of translated text")
+            }
+
+            Section("Overlay Window") {
+                Toggle("Lock Overlay", isOn: Binding(
+                    get: { settings.overlayLocked },
+                    set: { newValue in
+                        settings.overlayLocked = newValue
+                        onToggleOverlayLock?(newValue)
+                    }
+                ))
+                .accessibilityLabel("Lock overlay position")
+                Text(settings.overlayLocked
+                    ? "Locked: clicks pass through to windows below."
+                    : "Unlocked: drag to move or resize the overlay.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Button("Reset Overlay Position & Size") {
+                    onResetOverlay?()
+                }
+                .accessibilityLabel("Reset overlay window to default position and size")
             }
 
             Section("Live Preview") {

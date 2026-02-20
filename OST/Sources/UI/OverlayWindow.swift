@@ -29,16 +29,28 @@ final class OverlayWindow: NSPanel {
         backgroundColor = .clear
         isOpaque = false
         hasShadow = false
-        isMovableByWindowBackground = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        ignoresMouseEvents = settings.overlayLocked
+
+        // Apply initial lock state
+        let locked = settings.overlayLocked
+        ignoresMouseEvents = locked
+        isMovableByWindowBackground = !locked
 
         let subtitleView = SubtitleView(
             appState: appState,
             settings: settings,
             translationService: appState.translationService
         )
-        contentView = NSHostingView(rootView: subtitleView)
+        let hostingView = NSHostingView(rootView: subtitleView)
+        hostingView.sizingOptions = []
+
+        // Wrap in a plain NSView container to completely prevent
+        // NSHostingView from driving window size changes
+        let container = NSView()
+        container.autoresizesSubviews = true
+        hostingView.autoresizingMask = [.width, .height]
+        container.addSubview(hostingView)
+        contentView = container
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(persistFrame),
@@ -60,9 +72,26 @@ final class OverlayWindow: NSPanel {
     }
 
     func updateLockState(locked: Bool) {
-        ignoresMouseEvents = locked
+        if locked {
+            ignoresMouseEvents = true
+            isMovableByWindowBackground = false
+        } else {
+            ignoresMouseEvents = false
+            isMovableByWindowBackground = true
+        }
     }
 
-    override var canBecomeKey: Bool { true }
+    func resetFrame() {
+        let defaultFrame = NSRect(x: 200, y: 200, width: 600, height: 200)
+        setFrame(defaultFrame, display: true, animate: true)
+        // Note: persistFrame() will be called via didResizeNotification.
+        // WindowManager.resetOverlay() sets overlayFrameSaved = false AFTER this call.
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    override var canBecomeKey: Bool { !ignoresMouseEvents }
     override var canBecomeMain: Bool { false }
 }
