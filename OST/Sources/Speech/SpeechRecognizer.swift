@@ -78,6 +78,7 @@ final class SpeechRecognizer: ObservableObject {
         recognitionRequest = nil
         recognitionTask = nil
         currentText = ""
+        finalizedText = ""
     }
 
     // MARK: - Recognition Task
@@ -88,42 +89,49 @@ final class SpeechRecognizer: ObservableObject {
             throw SpeechRecognizerError.recognizerUnavailable
         }
 
-        // Clean up previous task without clearing isActive
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
-        recognitionRequest = nil
-        recognitionTask = nil
-
+        // Create the new request BEFORE cleaning up the old one
+        // to minimize the window where recognitionRequest is nil
+        // and audio buffers from startConsumingBuffers are lost.
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         if useOnDevice && recognizer.supportsOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true
         }
         request.addsPunctuation = true
-        recognitionRequest = request
+
+        // Now clean up previous task
+        let oldRequest = recognitionRequest
+        let oldTask = recognitionTask
+        recognitionRequest = request  // Swap immediately so append() uses new request
+
+        oldRequest?.endAudio()
+        oldTask?.cancel()
 
         AppLogger.shared.log("Starting recognition task (onDevice: \(useOnDevice))", category: .speech)
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
-            if let result {
-                Task { @MainActor in
+            Task { @MainActor in
+                if let result {
                     let text = result.bestTranscription.formattedString
                     self.currentText = text
                     if result.isFinal {
                         AppLogger.shared.log("Final: \"\(text)\"", category: .speech)
-                        self.finalizedText += (self.finalizedText.isEmpty ? "" : " ") + text
+                        self.finalizedText = ""
                         self.currentText = ""
-                        // Auto-restart recognition for continuous listening
                         self.restartRecognition()
+                        return
+                    }
+                    // Partial result with concurrent error — task is dying
+                    if error != nil {
+                        AppLogger.shared.log("Partial result with error, restarting", category: .speech)
+                        self.restartRecognition()
+                        return
                     }
                 }
-            }
-            if let error {
-                Task { @MainActor in
+                if let error, result == nil {
                     AppLogger.shared.log("Recognition error: \(error.localizedDescription)", category: .error)
                     self.currentText = ""
-                    // Auto-restart on transient errors
                     self.restartRecognition()
                 }
             }

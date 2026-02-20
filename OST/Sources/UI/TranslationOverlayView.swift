@@ -1,7 +1,9 @@
 import SwiftUI
 import Translation
 
-struct SubtitleView: View {
+/// Overlay view for split mode: shows only translated text.
+/// Hosts the .translationTask modifier to receive translation sessions.
+struct TranslationOverlayView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var settings: UserSettings
     @ObservedObject var translationService: TranslationService
@@ -10,19 +12,24 @@ struct SubtitleView: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView(.vertical, showsIndicators: !settings.overlayLocked) {
+            ScrollView(.vertical, showsIndicators: !settings.overlay2Locked) {
                 VStack(alignment: .leading, spacing: 6) {
                     Spacer(minLength: 0)
 
                     ForEach(appState.subtitleEntries) { entry in
-                        subtitleRow(entry)
+                        Text(entry.translated.isEmpty ? "..." : entry.translated)
+                            .font(.system(size: settings.translatedFontSize))
+                            .foregroundColor(entry.translated.isEmpty
+                                ? settings.translatedFontColor.opacity(0.4)
+                                : settings.translatedFontColor)
+                            .fixedSize(horizontal: false, vertical: true)
                             .transition(.opacity)
                     }
 
-                    if !appState.liveText.isEmpty && settings.showOriginalText {
-                        Text(appState.liveText)
-                            .font(.system(size: settings.fontSize))
-                            .foregroundColor(settings.fontColor.opacity(0.6))
+                    if !appState.liveTranslatedText.isEmpty {
+                        Text(appState.liveTranslatedText)
+                            .font(.system(size: settings.translatedFontSize))
+                            .foregroundColor(settings.translatedFontColor.opacity(0.6))
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -32,7 +39,7 @@ struct SubtitleView: View {
                 }
                 .frame(maxWidth: .infinity, minHeight: 0, alignment: .bottomLeading)
             }
-            .scrollDisabled(settings.overlayLocked)
+            .scrollDisabled(settings.overlay2Locked)
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 let atBottom = geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 10
                 return atBottom
@@ -42,7 +49,7 @@ struct SubtitleView: View {
             .onChange(of: appState.subtitleEntries.count) { _, _ in
                 withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
             }
-            .onChange(of: appState.liveText) { _, _ in
+            .onChange(of: appState.liveTranslatedText) { _, _ in
                 withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
             }
         }
@@ -56,35 +63,16 @@ struct SubtitleView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .stroke(
-                    settings.overlayLocked
+                    settings.overlay2Locked
                         ? Color.white.opacity(0.15)
                         : Color.accentColor.opacity(0.6),
-                    lineWidth: settings.overlayLocked ? 1 : 2
+                    lineWidth: settings.overlay2Locked ? 1 : 2
                 )
         )
         .animation(.easeInOut(duration: 0.2), value: appState.subtitleEntries.count)
         .translationTask(translationService.configuration) { session in
             AppLogger.shared.log("Translation session delivered by .translationTask", category: .translation)
             translationService.handleSession(session)
-        }
-    }
-
-    @ViewBuilder
-    private func subtitleRow(_ entry: SubtitleEntry) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if settings.showOriginalText {
-                Text(entry.recognized)
-                    .font(.system(size: settings.fontSize))
-                    .foregroundColor(settings.fontColor)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if settings.showTranslation && !entry.translated.isEmpty {
-                Text(entry.translated)
-                    .font(.system(size: settings.translatedFontSize))
-                    .foregroundColor(settings.translatedFontColor)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
     }
 }

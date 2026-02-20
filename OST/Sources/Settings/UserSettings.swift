@@ -48,6 +48,17 @@ final class UserSettings: ObservableObject {
     @AppStorage("overlayFrameY") var overlayFrameY: Double = 200
     @AppStorage("overlayFrameSaved") var overlayFrameSaved: Bool = false
 
+    // Display mode: "combined" (single window) or "split" (recognition + translation)
+    @AppStorage("overlayDisplayMode") var overlayDisplayMode: String = "combined"
+
+    // Second overlay (translation window) frame
+    @AppStorage("overlay2FrameX") var overlay2FrameX: Double = 200
+    @AppStorage("overlay2FrameY") var overlay2FrameY: Double = 450
+    @AppStorage("overlay2Width") var overlay2Width: Double = 600
+    @AppStorage("overlay2Height") var overlay2Height: Double = 200
+    @AppStorage("overlay2FrameSaved") var overlay2FrameSaved: Bool = false
+    @AppStorage("overlay2Locked") var overlay2Locked: Bool = true
+
     var fontColor: Color {
         get { Self.decodeColor(fontColorData) ?? .white }
         set { fontColorData = Self.encodeColor(newValue) }

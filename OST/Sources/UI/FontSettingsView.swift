@@ -2,6 +2,10 @@ import SwiftUI
 
 struct FontSettingsView: View {
     @ObservedObject var settings: UserSettings
+    var onResetOverlay: (() -> Void)?
+    var onResetOverlay2: (() -> Void)?
+    var onToggleOverlayLock: ((Bool) -> Void)?
+    var onToggleOverlay2Lock: ((Bool) -> Void)?
 
     var body: some View {
         Form {
@@ -102,6 +106,72 @@ struct FontSettingsView: View {
                 Toggle("Show Translation", isOn: $settings.showTranslation)
                     .accessibilityLabel("Show translation toggle")
                     .accessibilityHint("Toggle display of translated text")
+            }
+
+            Section("Display Mode") {
+                Picker("Mode", selection: $settings.overlayDisplayMode) {
+                    Text("Combined").tag("combined")
+                    Text("Split (Recognition + Translation)").tag("split")
+                }
+                .pickerStyle(.menu)
+
+                Text(settings.overlayDisplayMode == "split"
+                    ? "Two separate windows: recognition text and translated text."
+                    : "Single window showing both recognition and translation.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Button("Reset All Overlay Windows") {
+                    onResetOverlay?()
+                    if settings.overlayDisplayMode == "split" {
+                        onResetOverlay2?()
+                    }
+                }
+                .accessibilityLabel("Reset all overlay windows to default position and size")
+            }
+
+            Section("Overlay Window") {
+                Toggle("Lock Overlay", isOn: Binding(
+                    get: { settings.overlayLocked },
+                    set: { newValue in
+                        settings.overlayLocked = newValue
+                        onToggleOverlayLock?(newValue)
+                    }
+                ))
+                .accessibilityLabel("Lock overlay position")
+                Text(settings.overlayLocked
+                    ? "Locked: clicks pass through to windows below."
+                    : "Unlocked: drag to move or resize the overlay.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Button("Reset Overlay Position & Size") {
+                    onResetOverlay?()
+                }
+                .accessibilityLabel("Reset overlay window to default position and size")
+            }
+
+            if settings.overlayDisplayMode == "split" {
+                Section("Translation Window") {
+                    Toggle("Lock Translation Window", isOn: Binding(
+                        get: { settings.overlay2Locked },
+                        set: { newValue in
+                            settings.overlay2Locked = newValue
+                            onToggleOverlay2Lock?(newValue)
+                        }
+                    ))
+                    .accessibilityLabel("Lock translation window position")
+                    Text(settings.overlay2Locked
+                        ? "Locked: clicks pass through to windows below."
+                        : "Unlocked: drag to move or resize the translation window.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Button("Reset Translation Window Position & Size") {
+                        onResetOverlay2?()
+                    }
+                    .accessibilityLabel("Reset translation window to default position and size")
+                }
             }
 
             Section("Live Preview") {

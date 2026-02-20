@@ -41,6 +41,8 @@ SOURCES=(
     OST/Sources/App/WindowManager.swift
     OST/Sources/Accessibility/AccessibilityManager.swift
     OST/Sources/UI/SubtitleView.swift
+    OST/Sources/UI/RecognitionOverlayView.swift
+    OST/Sources/UI/TranslationOverlayView.swift
     OST/Sources/UI/OverlayWindow.swift
     OST/Sources/UI/FontSettingsView.swift
     OST/Sources/UI/LanguagePickerView.swift

@@ -1,10 +1,9 @@
 import SwiftUI
-import Translation
 
-struct SubtitleView: View {
+/// Overlay view for split mode: shows only recognized text (no translation).
+struct RecognitionOverlayView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var settings: UserSettings
-    @ObservedObject var translationService: TranslationService
 
     @State private var isAtBottom = true
 
@@ -15,11 +14,14 @@ struct SubtitleView: View {
                     Spacer(minLength: 0)
 
                     ForEach(appState.subtitleEntries) { entry in
-                        subtitleRow(entry)
+                        Text(entry.recognized)
+                            .font(.system(size: settings.fontSize))
+                            .foregroundColor(settings.fontColor)
+                            .fixedSize(horizontal: false, vertical: true)
                             .transition(.opacity)
                     }
 
-                    if !appState.liveText.isEmpty && settings.showOriginalText {
+                    if !appState.liveText.isEmpty {
                         Text(appState.liveText)
                             .font(.system(size: settings.fontSize))
                             .foregroundColor(settings.fontColor.opacity(0.6))
@@ -63,28 +65,5 @@ struct SubtitleView: View {
                 )
         )
         .animation(.easeInOut(duration: 0.2), value: appState.subtitleEntries.count)
-        .translationTask(translationService.configuration) { session in
-            AppLogger.shared.log("Translation session delivered by .translationTask", category: .translation)
-            translationService.handleSession(session)
-        }
-    }
-
-    @ViewBuilder
-    private func subtitleRow(_ entry: SubtitleEntry) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if settings.showOriginalText {
-                Text(entry.recognized)
-                    .font(.system(size: settings.fontSize))
-                    .foregroundColor(settings.fontColor)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if settings.showTranslation && !entry.translated.isEmpty {
-                Text(entry.translated)
-                    .font(.system(size: settings.translatedFontSize))
-                    .foregroundColor(settings.translatedFontColor)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
     }
 }

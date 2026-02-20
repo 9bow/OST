@@ -16,7 +16,13 @@ struct OSTApp: App {
                 onOpenSettings: openSettings,
                 onOpenLogs: { windowManager.showLogViewer() },
                 onOpenSessions: { windowManager.showSessionHistory(recorder: appState.sessionRecorder, alwaysOnTop: settings.sessionWindowAlwaysOnTop) },
-                onToggleOverlayLock: { locked in windowManager.updateOverlayLock(locked: locked) },
+                onToggleOverlayLock: { locked in
+                    windowManager.updateOverlayLock(locked: locked)
+                    if settings.overlayDisplayMode == "split" {
+                        settings.overlay2Locked = locked
+                        windowManager.updateOverlay2Lock(locked: locked)
+                    }
+                },
                 onQuit: quitApp
             )
         }

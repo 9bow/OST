@@ -11,6 +11,11 @@ struct MenuBarView: View {
     let onToggleOverlayLock: (Bool) -> Void
     let onQuit: () -> Void
 
+    private var sourceLanguageDisplay: String {
+        if settings.sourceLanguage == "auto" { return "Auto" }
+        return (SupportedLanguage(rawValue: settings.sourceLanguage) ?? .english).displayName
+    }
+
     private var sourceLanguage: SupportedLanguage {
         SupportedLanguage(rawValue: settings.sourceLanguage) ?? .english
     }
@@ -31,8 +36,8 @@ struct MenuBarView: View {
 
             Divider()
 
-            Text("\(sourceLanguage.flagEmoji) \(sourceLanguage.displayName) → \(targetLanguage.flagEmoji) \(targetLanguage.displayName)")
-                .accessibilityLabel("Translating from \(sourceLanguage.displayName) to \(targetLanguage.displayName)")
+            Text("\(settings.sourceLanguage == "auto" ? "🌐" : sourceLanguage.flagEmoji) \(sourceLanguageDisplay) → \(targetLanguage.flagEmoji) \(targetLanguage.displayName)")
+                .accessibilityLabel("Translating from \(sourceLanguageDisplay) to \(targetLanguage.displayName)")
 
             Divider()
 

@@ -35,29 +35,11 @@ final class TranslationService: ObservableObject {
         return try await fallbackTranslation(trimmed)
     }
 
-    /// Translates text with context from recent entries for consistency.
-    /// Sends context + new text separated by newlines, then extracts only the new translation.
-    func translateWithContext(_ text: String, context: [String]) async throws -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "" }
-        guard !context.isEmpty, let session else {
-            return try await translate(trimmed)
-        }
-
-        let fullText = context.joined(separator: "\n") + "\n" + trimmed
-        let response = try await session.translate(fullText)
-        let resultLines = response.targetText.components(separatedBy: "\n")
-        let contextLineCount = context.count
-        if resultLines.count > contextLineCount {
-            return resultLines.dropFirst(contextLineCount).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        return response.targetText
-    }
-
     private func fallbackTranslation(_ text: String) async throws -> String {
         let sourceLang = configuration?.source?.languageCode?.identifier ?? "en"
+        let targetLang = configuration?.target?.languageCode?.identifier ?? "ko"
         let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? text
-        let urlString = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=\(sourceLang)&tl=ko&dt=t&q=\(encoded)"
+        let urlString = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=\(sourceLang)&tl=\(targetLang)&dt=t&q=\(encoded)"
 
         guard let url = URL(string: urlString) else { return text }
 

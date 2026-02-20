@@ -29,14 +29,19 @@ final class SystemAudioCapture: NSObject, @unchecked Sendable {
     private var stream: SCStream?
     private var continuation: AsyncStream<CMSampleBuffer>.Continuation?
     private(set) var audioBuffers: AsyncStream<CMSampleBuffer>?
-    private var bufferCount: Int = 0
+    private let bufferLock = NSLock()
+    private var _bufferCount: Int = 0
+    private var bufferCount: Int {
+        get { bufferLock.withLock { _bufferCount } }
+        set { bufferLock.withLock { _bufferCount = newValue } }
+    }
 
     /// Requests permission if needed, then starts capturing system audio.
     /// Returns a fresh AsyncStream of audio buffers for each capture session.
     func startCapture() async throws -> AsyncStream<CMSampleBuffer> {
         guard stream == nil else {
             AppLogger.post("Stream already active, returning existing", category: .audio)
-            return audioBuffers!
+            return audioBuffers ?? AsyncStream { $0.finish() }
         }
 
         bufferCount = 0
@@ -95,14 +100,15 @@ final class SystemAudioCapture: NSObject, @unchecked Sendable {
     func stopCapture() async {
         guard let current = stream else { return }
         stream = nil
+        // Finish continuation BEFORE awaiting stopCapture to prevent dangling yields
+        continuation?.finish()
+        continuation = nil
         AppLogger.post("Stopping capture (received \(bufferCount) audio buffers)", category: .audio)
         do {
             try await current.stopCapture()
         } catch {
             AppLogger.post("Stop error (non-fatal): \(error.localizedDescription)", category: .audio)
         }
-        continuation?.finish()
-        continuation = nil
     }
 
     // MARK: - Helpers
