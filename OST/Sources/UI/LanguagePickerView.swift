@@ -50,7 +50,7 @@ struct LanguagePickerView: View {
                 .accessibilityLabel("Swap source and target languages")
                 .accessibilityHint("Exchanges the source and target language selections")
                 .keyboardShortcut("s", modifiers: [.command, .shift])
-                .disabled(settings.sourceLanguage == settings.targetLanguage)
+                .disabled(settings.sourceLanguage == settings.targetLanguage || settings.sourceLanguage == "auto")
             }
         }
         .formStyle(.grouped)
@@ -103,9 +103,12 @@ struct LanguagePickerView: View {
     // MARK: - Actions
 
     private func swapLanguages() {
+        guard settings.sourceLanguage != "auto" else { return }
+        let oldSource = sourceLanguage.displayName
+        let oldTarget = targetLanguage.displayName
         let previous = settings.sourceLanguage
         settings.sourceLanguage = settings.targetLanguage
         settings.targetLanguage = previous
-        AccessibilityManager.announce("Languages swapped: \(targetLanguage.displayName) to \(sourceLanguage.displayName)")
+        AccessibilityManager.announce("Languages swapped: \(oldTarget) to \(oldSource)")
     }
 }

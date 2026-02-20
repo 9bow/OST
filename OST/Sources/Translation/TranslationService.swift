@@ -37,8 +37,9 @@ final class TranslationService: ObservableObject {
 
     private func fallbackTranslation(_ text: String) async throws -> String {
         let sourceLang = configuration?.source?.languageCode?.identifier ?? "en"
+        let targetLang = configuration?.target?.languageCode?.identifier ?? "ko"
         let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? text
-        let urlString = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=\(sourceLang)&tl=ko&dt=t&q=\(encoded)"
+        let urlString = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=\(sourceLang)&tl=\(targetLang)&dt=t&q=\(encoded)"
 
         guard let url = URL(string: urlString) else { return text }
 

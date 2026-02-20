@@ -37,6 +37,8 @@ final class AppState: ObservableObject {
     private var expiryTimer: Timer?
     private var speechPauseTimer: Timer?
     private var lastConsumedPartial: String = ""
+    private var lastConsumedTail: String = ""
+    private var lastSinkCurrentText: String = ""
     private var saveSessionHistory: Bool = true
     private var cancellables = Set<AnyCancellable>()
     private var autoDetectEnabled: Bool = false
@@ -76,6 +78,7 @@ final class AppState: ObservableObject {
 
             isCapturing = true
             lastConsumedPartial = ""
+            lastConsumedTail = ""
             subtitleEntries = []
             liveText = ""
             startConsumingBuffers(from: buffers)
@@ -95,6 +98,7 @@ final class AppState: ObservableObject {
     /// Stops capture and recognition, preserving last recognized text.
     func stopCapture() async {
         guard isCapturing else { return }
+        isCapturing = false
 
         bufferConsumerTask?.cancel()
         bufferConsumerTask = nil
@@ -103,10 +107,8 @@ final class AppState: ObservableObject {
         speechPauseTimer?.invalidate()
         speechPauseTimer = nil
 
-        await audioCapture.stopCapture()
         speechRecognizer.stopRecognition()
-
-        isCapturing = false
+        await audioCapture.stopCapture()
 
         if saveSessionHistory {
             sessionRecorder.endSession()
@@ -119,6 +121,7 @@ final class AppState: ObservableObject {
         do {
             try await speechRecognizer.changeLanguage(locale: locale, useOnDevice: useOnDevice)
             lastConsumedPartial = ""
+            lastConsumedTail = ""
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -157,10 +160,12 @@ final class AppState: ObservableObject {
         AppLogger.shared.log("Auto-detected language: \(target.displayName) (confidence: \(confidence))", category: .speech)
 
         Task {
-            await changeSourceLanguage(to: target.speechLocale, useOnDevice: speechRecognizer.currentOnDeviceSetting)
-            // Reset consumed state since recognizer restarts
+            guard self.isCapturing else { return }
+            // Reset consumed state BEFORE language change to avoid stale tracking
             lastConsumedPartial = ""
+            lastConsumedTail = ""
             liveText = ""
+            await changeSourceLanguage(to: target.speechLocale, useOnDevice: speechRecognizer.currentOnDeviceSetting)
         }
     }
 
@@ -194,6 +199,8 @@ final class AppState: ObservableObject {
                     if !self.liveText.isEmpty {
                         self.consumeRemainingText()
                     }
+                    // Save tail of consumed text for overlap detection on next session
+                    self.lastConsumedTail = String(self.lastConsumedPartial.suffix(60))
                     self.lastConsumedPartial = ""
                     self.liveText = ""
                     self.speechPauseTimer?.invalidate()
@@ -205,16 +212,40 @@ final class AppState: ObservableObject {
                 if !self.lastConsumedPartial.isEmpty && currentText.hasPrefix(self.lastConsumedPartial) {
                     self.liveText = String(currentText.dropFirst(self.lastConsumedPartial.count)).trimmingCharacters(in: .whitespaces)
                 } else if self.lastConsumedPartial.isEmpty {
-                    self.liveText = currentText
+                    // After restart, check for overlap with previous session's tail
+                    if !self.lastConsumedTail.isEmpty {
+                        let stripped = self.stripOverlap(newText: currentText, tail: self.lastConsumedTail)
+                        self.liveText = stripped
+                        if stripped != currentText {
+                            // We found overlap; track what we've consumed from the new session
+                            let overlapLength = currentText.count - stripped.count
+                            self.lastConsumedPartial = String(currentText.prefix(overlapLength))
+                            AppLogger.shared.log("Stripped overlap: \(overlapLength) chars from new session", category: .speech)
+                        }
+                    } else {
+                        self.liveText = currentText
+                    }
+                    // Clear tail after first use in new session (unconditional)
+                    self.lastConsumedTail = ""
                 } else {
-                    // currentText was reset with new content (e.g. language change)
-                    self.lastConsumedPartial = ""
-                    self.liveText = currentText
+                    // currentText diverged from lastConsumedPartial (recognizer reformulation)
+                    // Find longest common prefix to avoid re-showing already-consumed text
+                    let common = self.findCommonPrefix(currentText, self.lastConsumedPartial)
+                    if common.count > 10 {
+                        self.lastConsumedPartial = common
+                        self.liveText = String(currentText.dropFirst(common.count)).trimmingCharacters(in: .whitespaces)
+                    } else {
+                        // Completely different text (e.g. language change)
+                        self.lastConsumedPartial = ""
+                        self.liveText = currentText
+                    }
                 }
 
+                self.lastSinkCurrentText = currentText
                 self.detectLanguageIfNeeded(currentText)
                 // Extract completed sentences immediately (triggered by punctuation)
-                self.extractCompleteSentences()
+                // Pass currentText from sink to avoid reading stale speechRecognizer.currentText
+                self.extractCompleteSentences(sinkCurrentText: currentText)
                 self.resetSpeechPauseTimer()
             }
             .store(in: &cancellables)
@@ -236,12 +267,13 @@ final class AppState: ObservableObject {
 
         let text = liveText
         liveText = ""
-        lastConsumedPartial = speechRecognizer.currentText
+        lastConsumedPartial = lastSinkCurrentText
 
         AppLogger.shared.log("Pause-triggered consume: \"\(text)\"", category: .speech)
 
         let chunks = splitIntoChunks(text)
         for sentence in chunks {
+            guard !isDuplicateEntry(sentence) else { continue }
             let entry = SubtitleEntry(timestamp: Date(), recognized: sentence, isFinal: true)
             subtitleEntries.append(entry)
             translateEntry(id: entry.id, text: sentence)
@@ -250,7 +282,9 @@ final class AppState: ObservableObject {
     }
 
     /// Extracts completed sentences from liveText when punctuation boundaries are detected.
-    private func extractCompleteSentences() {
+    /// Uses `sinkCurrentText` (the value delivered by the Combine sink) instead of reading
+    /// `speechRecognizer.currentText` directly, which may have changed since delivery.
+    private func extractCompleteSentences(sinkCurrentText: String) {
         guard !liveText.isEmpty, isCapturing else { return }
 
         // Split liveText into sentences using linguistic analysis
@@ -260,9 +294,9 @@ final class AppState: ObservableObject {
         }
 
         // Need 2+ sentences: all but last are complete, last is in-progress
-        guard sentenceRanges.count >= 2 else { return }
+        guard sentenceRanges.count >= 2, let lastRange = sentenceRanges.last else { return }
 
-        let lastStart = sentenceRanges.last!.lowerBound
+        let lastStart = lastRange.lowerBound
         let completedText = String(liveText[..<lastStart])
         let remaining = String(liveText[lastStart...]).trimmingCharacters(in: .whitespaces)
 
@@ -276,20 +310,20 @@ final class AppState: ObservableObject {
         guard !sentences.isEmpty else { return }
 
         for sentence in sentences {
+            guard !isDuplicateEntry(sentence) else { continue }
             let entry = SubtitleEntry(timestamp: Date(), recognized: sentence, isFinal: true)
             subtitleEntries.append(entry)
             translateEntry(id: entry.id, text: sentence)
         }
         trimEntries()
 
-        // Update tracking: lastConsumedPartial = fullText minus remaining
-        let fullText = speechRecognizer.currentText
+        // Update tracking using the consistent sinkCurrentText value
         if remaining.isEmpty {
-            lastConsumedPartial = fullText
-        } else if let range = fullText.range(of: remaining, options: .backwards) {
-            lastConsumedPartial = String(fullText[..<range.lowerBound])
+            lastConsumedPartial = sinkCurrentText
+        } else if let range = sinkCurrentText.range(of: remaining, options: .backwards) {
+            lastConsumedPartial = String(sinkCurrentText[..<range.lowerBound])
         } else {
-            lastConsumedPartial = fullText
+            lastConsumedPartial = sinkCurrentText
         }
 
         liveText = remaining
@@ -305,6 +339,7 @@ final class AppState: ObservableObject {
         AppLogger.shared.log("Consuming remaining text before reset: \"\(text)\"", category: .speech)
         let chunks = splitIntoChunks(text)
         for sentence in chunks {
+            guard !isDuplicateEntry(sentence) else { continue }
             let entry = SubtitleEntry(timestamp: Date(), recognized: sentence, isFinal: true)
             subtitleEntries.append(entry)
             translateEntry(id: entry.id, text: sentence)
@@ -364,6 +399,39 @@ final class AppState: ObservableObject {
             }
         }
         return chunks.isEmpty ? [text] : chunks
+    }
+
+    /// Returns the longest common prefix between two strings.
+    private func findCommonPrefix(_ a: String, _ b: String) -> String {
+        var endIndex = a.startIndex
+        var aIdx = a.startIndex
+        var bIdx = b.startIndex
+        while aIdx < a.endIndex && bIdx < b.endIndex {
+            if a[aIdx] != b[bIdx] { break }
+            aIdx = a.index(after: aIdx)
+            bIdx = b.index(after: bIdx)
+            endIndex = aIdx
+        }
+        return String(a[..<endIndex])
+    }
+
+    /// Checks if the same recognized text was very recently added to avoid duplicates from recognizer reformulation.
+    private func isDuplicateEntry(_ text: String) -> Bool {
+        let cutoff = Date().addingTimeInterval(-2.0)
+        return subtitleEntries.suffix(2).contains { $0.recognized == text && $0.timestamp > cutoff }
+    }
+
+    /// Finds and strips overlapping text between the tail of previously consumed text and the start of new text.
+    private func stripOverlap(newText: String, tail: String) -> String {
+        // Try progressively shorter suffixes of the tail to find overlap with the start of newText
+        let tailWords = tail.split(separator: " ")
+        for startIdx in 0..<tailWords.count {
+            let suffix = tailWords[startIdx...].joined(separator: " ")
+            if newText.hasPrefix(suffix) {
+                return String(newText.dropFirst(suffix.count)).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return newText
     }
 
     private func trimEntries() {
