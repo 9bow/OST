@@ -22,6 +22,7 @@ final class AppState: ObservableObject {
     @Published var isCapturing: Bool = false
     @Published private(set) var subtitleEntries: [SubtitleEntry] = []
     @Published private(set) var liveText: String = ""
+    @Published private(set) var liveTranslatedText: String = ""
     @Published var errorMessage: String? = nil
 
     // MARK: - Pipeline Components
@@ -36,6 +37,8 @@ final class AppState: ObservableObject {
     private var bufferConsumerTask: Task<Void, Never>?
     private var expiryTimer: Timer?
     private var speechPauseTimer: Timer?
+    private var liveTranslationTimer: Timer?
+    private var liveTranslationTask: Task<Void, Never>?
     private var lastConsumedPartial: String = ""
     private var lastConsumedTail: String = ""
     private var lastSinkCurrentText: String = ""
@@ -106,6 +109,11 @@ final class AppState: ObservableObject {
         expiryTimer = nil
         speechPauseTimer?.invalidate()
         speechPauseTimer = nil
+        liveTranslationTimer?.invalidate()
+        liveTranslationTimer = nil
+        liveTranslationTask?.cancel()
+        liveTranslationTask = nil
+        liveTranslatedText = ""
 
         speechRecognizer.stopRecognition()
         await audioCapture.stopCapture()
@@ -203,6 +211,9 @@ final class AppState: ObservableObject {
                     self.lastConsumedTail = String(self.lastConsumedPartial.suffix(60))
                     self.lastConsumedPartial = ""
                     self.liveText = ""
+                    self.liveTranslatedText = ""
+                    self.liveTranslationTimer?.invalidate()
+                    self.liveTranslationTask?.cancel()
                     self.speechPauseTimer?.invalidate()
                     self.speechPauseTimer = nil
                     return
@@ -247,8 +258,36 @@ final class AppState: ObservableObject {
                 // Pass currentText from sink to avoid reading stale speechRecognizer.currentText
                 self.extractCompleteSentences(sinkCurrentText: currentText)
                 self.resetSpeechPauseTimer()
+                self.debounceLiveTranslation()
             }
             .store(in: &cancellables)
+    }
+
+    private func debounceLiveTranslation() {
+        liveTranslationTimer?.invalidate()
+        guard !liveText.isEmpty else {
+            liveTranslatedText = ""
+            liveTranslationTask?.cancel()
+            return
+        }
+        liveTranslationTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.isCapturing, !self.liveText.isEmpty else { return }
+                let textToTranslate = self.liveText
+                self.liveTranslationTask?.cancel()
+                self.liveTranslationTask = Task { [weak self] in
+                    guard let self else { return }
+                    do {
+                        let result = try await self.translationService.translate(textToTranslate)
+                        if !Task.isCancelled {
+                            self.liveTranslatedText = result
+                        }
+                    } catch {
+                        // Translation failed silently — keep previous liveTranslatedText
+                    }
+                }
+            }
+        }
     }
 
     private func resetSpeechPauseTimer() {
@@ -267,13 +306,14 @@ final class AppState: ObservableObject {
 
         let text = liveText
         liveText = ""
+        liveTranslatedText = ""
         lastConsumedPartial = lastSinkCurrentText
 
         AppLogger.shared.log("Pause-triggered consume: \"\(text)\"", category: .speech)
 
         let chunks = splitIntoChunks(text)
         for sentence in chunks {
-            guard !isDuplicateEntry(sentence) else { continue }
+            guard !isPunctuationOnly(sentence), !isDuplicateEntry(sentence) else { continue }
             let entry = SubtitleEntry(timestamp: Date(), recognized: sentence, isFinal: true)
             subtitleEntries.append(entry)
             translateEntry(id: entry.id, text: sentence)
@@ -310,7 +350,7 @@ final class AppState: ObservableObject {
         guard !sentences.isEmpty else { return }
 
         for sentence in sentences {
-            guard !isDuplicateEntry(sentence) else { continue }
+            guard !isPunctuationOnly(sentence), !isDuplicateEntry(sentence) else { continue }
             let entry = SubtitleEntry(timestamp: Date(), recognized: sentence, isFinal: true)
             subtitleEntries.append(entry)
             translateEntry(id: entry.id, text: sentence)
@@ -339,7 +379,7 @@ final class AppState: ObservableObject {
         AppLogger.shared.log("Consuming remaining text before reset: \"\(text)\"", category: .speech)
         let chunks = splitIntoChunks(text)
         for sentence in chunks {
-            guard !isDuplicateEntry(sentence) else { continue }
+            guard !isPunctuationOnly(sentence), !isDuplicateEntry(sentence) else { continue }
             let entry = SubtitleEntry(timestamp: Date(), recognized: sentence, isFinal: true)
             subtitleEntries.append(entry)
             translateEntry(id: entry.id, text: sentence)
@@ -415,10 +455,16 @@ final class AppState: ObservableObject {
         return String(a[..<endIndex])
     }
 
+    /// Returns true if text is only punctuation/whitespace and should not be a subtitle entry.
+    private func isPunctuationOnly(_ text: String) -> Bool {
+        let stripped = text.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        return stripped.isEmpty
+    }
+
     /// Checks if the same recognized text was very recently added to avoid duplicates from recognizer reformulation.
     private func isDuplicateEntry(_ text: String) -> Bool {
-        let cutoff = Date().addingTimeInterval(-2.0)
-        return subtitleEntries.suffix(2).contains { $0.recognized == text && $0.timestamp > cutoff }
+        let cutoff = Date().addingTimeInterval(-5.0)
+        return subtitleEntries.suffix(4).contains { $0.recognized == text && $0.timestamp > cutoff }
     }
 
     /// Finds and strips overlapping text between the tail of previously consumed text and the start of new text.

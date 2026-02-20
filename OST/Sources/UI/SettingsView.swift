@@ -5,11 +5,19 @@ struct SettingsView: View {
     let onOpenLogs: () -> Void
     let onOpenSessions: () -> Void
     var onResetOverlay: (() -> Void)?
+    var onResetOverlay2: (() -> Void)?
     var onToggleOverlayLock: ((Bool) -> Void)?
+    var onToggleOverlay2Lock: ((Bool) -> Void)?
 
     var body: some View {
         TabView {
-            FontSettingsView(settings: settings, onResetOverlay: onResetOverlay, onToggleOverlayLock: onToggleOverlayLock)
+            FontSettingsView(
+                settings: settings,
+                onResetOverlay: onResetOverlay,
+                onResetOverlay2: onResetOverlay2,
+                onToggleOverlayLock: onToggleOverlayLock,
+                onToggleOverlay2Lock: onToggleOverlay2Lock
+            )
                 .tabItem {
                     Label("Display", systemImage: "textformat.size")
                 }
