@@ -255,9 +255,9 @@ final class AppState: ObservableObject {
                         if !trimmedConsumed.isEmpty && trimmedCurrent.hasSuffix(trimmedConsumed) {
                             let newPart = String(trimmedCurrent.dropLast(trimmedConsumed.count))
                             self.liveText = self.stripLeadingPunctuation(newPart)
-                            // Update tracking so subsequent sink calls use this as the new base,
-                            // preventing repeated stripping of the same consumed suffix
-                            self.lastConsumedPartial = currentText
+                            // Do NOT update lastConsumedPartial here: newPart is still live/unconsumed.
+                            // Overwriting with currentText would cause newPart to be silently dropped
+                            // on the next sink call when currentText extends.
                             AppLogger.shared.log("Reformulation suffix stripped: \(trimmedConsumed.count) chars", category: .speech)
                         } else {
                             // Completely different text (e.g. language change)
@@ -473,11 +473,11 @@ final class AppState: ObservableObject {
         return String(a[..<endIndex])
     }
 
-    /// Strips leading punctuation characters (commas, periods, etc.) and whitespace from text.
+    /// Strips leading punctuation characters (commas, periods, etc.) and all leading whitespace (including newlines) from text.
     private func stripLeadingPunctuation(_ text: String) -> String {
         var result = text[...]
         while let first = result.unicodeScalars.first,
-              CharacterSet.punctuationCharacters.union(.whitespaces).contains(first) {
+              CharacterSet.punctuationCharacters.union(.whitespacesAndNewlines).contains(first) {
             result = result.dropFirst()
         }
         return String(result)

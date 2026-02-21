@@ -146,7 +146,16 @@ struct SessionHistoryView: View {
             hostWindow?.level = originalLevel ?? .normal
             guard response == .OK, let url = panel.url else { return }
             let text = sessionText(session)
-            try? text.write(to: url, atomically: true, encoding: .utf8)
+            do {
+                try text.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                AppLogger.shared.log("Session export failed: \(error.localizedDescription)", category: .app)
+                let alert = NSAlert()
+                alert.messageText = "Export Failed"
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .warning
+                alert.runModal()
+            }
         }
     }
 
