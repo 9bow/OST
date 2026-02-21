@@ -10,6 +10,8 @@ macOS를 위한 실시간 음성 인식 및 번역 오버레이 앱입니다.
 
 ![YouTube 영상 위 번역 오버레이](assets/overlay-demo.png)
 
+![분리 모드 — 인식 창과 번역 창을 독립적으로 배치](assets/overlay-demo-split-mode.png)
+
 <details>
 <summary>더 보기</summary>
 

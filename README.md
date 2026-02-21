@@ -10,6 +10,8 @@ Captures system audio, transcribes speech using Apple's Speech framework, and di
 
 ![Translation overlay on YouTube video](assets/overlay-demo.png)
 
+![Split mode — separate recognition and translation windows](assets/overlay-demo-split-mode.png)
+
 <details>
 <summary>More screenshots</summary>
 

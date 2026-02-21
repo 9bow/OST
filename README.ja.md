@@ -10,6 +10,8 @@ macOS向けのリアルタイム音声認識・翻訳オーバーレイアプリ
 
 ![YouTube動画上の翻訳オーバーレイ](assets/overlay-demo.png)
 
+![スプリットモード — 認識ウィンドウと翻訳ウィンドウを独立配置](assets/overlay-demo-split-mode.png)
+
 <details>
 <summary>その他のスクリーンショット</summary>
 
