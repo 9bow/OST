@@ -1,3 +1,5 @@
+English | [한국어](README.ko.md) | [中文](README.zh.md) | [日本語](README.ja.md)
+
 # OST — On-Screen Translator
 
 Real-time speech recognition and translation overlay for macOS.
@@ -50,17 +52,31 @@ This project was entirely written by [Claude](https://claude.ai/) (Anthropic's A
 
 - macOS 15.0 (Sequoia) or later
 - Apple Silicon (arm64)
-- Xcode Command Line Tools
 
-## Setup Guide
+## Installation
 
-### Step 1: Install Command Line Tools
+### Option A: Download Pre-built Binary (Recommended)
+
+1. Download `OST.zip` from the [latest release](https://github.com/9bow/OST.git/releases/latest)
+2. Unzip and move `OST.app` to your Applications folder
+3. If macOS blocks the app on first run:
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/OST.app
+   ```
+
+### Option B: Build from Source
+
+Requires **Xcode Command Line Tools**:
 
 ```bash
 xcode-select --install
 ```
 
-### Step 2: Grant Required Permissions
+See the [Build](#build) section below for full instructions.
+
+## Setup Guide
+
+### Step 1: Grant Required Permissions
 
 On first launch, macOS will prompt for the following permissions. If not prompted, enable them manually:
 
@@ -71,15 +87,15 @@ On first launch, macOS will prompt for the following permissions. If not prompte
 
 > After granting permissions, you may need to restart OST for changes to take effect.
 
-### Step 3: Enable Siri & Dictation
+### Step 2: Enable Siri & Dictation
 
 Speech recognition (especially server-based) requires Siri & Dictation to be enabled:
 
 1. Open **System Settings > Siri & Spotlight**
 2. Turn on **Siri** (or "Listen for...")
-3. If using on-device recognition only, Siri does not need to be active — but the speech model must be downloaded (see Step 4)
+3. If using on-device recognition only, Siri does not need to be active — but the speech model must be downloaded (see Step 3)
 
-### Step 4: Download On-Device Speech Model (Recommended)
+### Step 3: Download On-Device Speech Model (Recommended)
 
 For faster, offline, and more reliable recognition:
 
@@ -89,7 +105,7 @@ For faster, offline, and more reliable recognition:
 
 > Without the on-device model, server-based recognition is used. This requires internet and may have higher latency.
 
-### Step 5: Download Translation Language Pack (Recommended)
+### Step 4: Download Translation Language Pack (Recommended)
 
 For offline translation using Apple Translation framework:
 

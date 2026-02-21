@@ -100,3 +100,14 @@ AppKit, SwiftUI, Speech, ScreenCaptureKit, CoreMedia, Translation, Combine, Natu
 
 - **Screen Recording** (for system audio capture via ScreenCaptureKit)
 - **Speech Recognition** (for SFSpeechRecognizer)
+
+## Multilingual README
+
+README is maintained in 4 languages. When modifying `README.md`, apply the same changes to all translations:
+
+- `README.md` — English (primary)
+- `README.ko.md` — 한국어
+- `README.zh.md` — 中文
+- `README.ja.md` — 日本語
+
+Each file has a language selector at the top. Code blocks, URLs, image paths, and CLI commands should remain identical across all versions.
