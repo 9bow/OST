@@ -102,8 +102,8 @@ For offline translation using Apple Translation framework:
 
 ```bash
 # Clone the repository
-git clone https://github.com/9bow/ost-on-screen-translator.git
-cd ost-on-screen-translator
+git clone https://github.com/9bow/OST.git
+cd OST
 
 # Full build → produces build/OST.app
 ./build.sh

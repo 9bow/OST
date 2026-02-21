@@ -15,6 +15,3 @@ ref-project/
 
 # OMC state
 .omc/
-
-# Claude Code
-CLAUDE.md
