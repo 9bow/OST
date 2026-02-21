@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SessionHistoryView: View {
     @ObservedObject var recorder: SessionRecorder
@@ -87,6 +88,11 @@ struct SessionHistoryView: View {
                     Text("\(session.entries.count) entries - \(session.duration)")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                    Button("Export…") {
+                        exportSession(session)
+                    }
+                    .font(.caption)
+                    .disabled(session.entries.isEmpty)
                 }
                 .padding(8)
 
@@ -121,6 +127,33 @@ struct SessionHistoryView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+    }
+
+    // MARK: - Export
+
+    private func exportSession(_ session: RecordedSession) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.nameFieldStringValue = "OST-\(session.formattedDate.replacingOccurrences(of: ":", with: "-")).txt"
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            let text = sessionText(session)
+            try? text.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+
+    private func sessionText(_ session: RecordedSession) -> String {
+        var lines: [String] = []
+        lines.append("OST Session: \(session.formattedDate)  [\(session.duration)]")
+        lines.append(String(repeating: "=", count: 60))
+        lines.append("")
+        for entry in session.entries {
+            lines.append("[\(entry.formattedTimestamp)]")
+            if !entry.recognizedText.isEmpty { lines.append(entry.recognizedText) }
+            if !entry.translatedText.isEmpty { lines.append("→ \(entry.translatedText)") }
+            lines.append("")
+        }
+        return lines.joined(separator: "\n")
     }
 }
 
