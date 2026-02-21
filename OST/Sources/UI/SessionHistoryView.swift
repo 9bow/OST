@@ -135,7 +135,15 @@ struct SessionHistoryView: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.plainText]
         panel.nameFieldStringValue = "OST-\(session.formattedDate.replacingOccurrences(of: ":", with: "-")).txt"
+
+        // Temporarily lower the session window level so the save panel appears in front
+        // when "Always on top" (.floating) is active.
+        let hostWindow = NSApp.keyWindow
+        let originalLevel = hostWindow?.level
+        hostWindow?.level = .normal
+
         panel.begin { response in
+            hostWindow?.level = originalLevel ?? .normal
             guard response == .OK, let url = panel.url else { return }
             let text = sessionText(session)
             try? text.write(to: url, atomically: true, encoding: .utf8)
