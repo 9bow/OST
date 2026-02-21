@@ -1,4 +1,4 @@
-[English](README.md) | [한국어](README.ko.md) | [中文](README.zh.md) | **日本語**
+[🇬🇧 English](README.md) | [🇰🇷 한국어](README.ko.md) | [🇨🇳 中文](README.zh.md) | 🇯🇵 **日本語**
 
 # OST — On-Screen Translator
 
