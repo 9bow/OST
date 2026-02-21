@@ -184,26 +184,64 @@ struct FontSettingsView: View {
     // MARK: - Preview
 
     private var previewSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if settings.showOriginalText {
-                Text("Hello, this is sample speech.")
-                    .font(.system(size: settings.fontSize))
-                    .foregroundColor(settings.fontColor)
-                    .accessibilityLabel("Preview original text sample")
-            }
-            if settings.showTranslation {
-                Text("안녕하세요, 샘플 음성입니다.")
-                    .font(.system(size: settings.translatedFontSize))
-                    .foregroundColor(settings.translatedFontColor)
-                    .accessibilityLabel("Preview translated text sample")
+        Group {
+            if settings.overlayDisplayMode == "split" {
+                HStack(spacing: 8) {
+                    // Recognition window
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Recognition")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("Hello, this is sample speech.")
+                            .font(.system(size: settings.fontSize))
+                            .foregroundColor(settings.fontColor)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(settings.backgroundColor.opacity(settings.backgroundOpacity))
+                    )
+
+                    // Translation window
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Translation")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("안녕하세요, 샘플 음성입니다.")
+                            .font(.system(size: settings.translatedFontSize))
+                            .foregroundColor(settings.translatedFontColor)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(settings.backgroundColor.opacity(settings.backgroundOpacity))
+                    )
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    if settings.showOriginalText {
+                        Text("Hello, this is sample speech.")
+                            .font(.system(size: settings.fontSize))
+                            .foregroundColor(settings.fontColor)
+                    }
+                    if settings.showTranslation {
+                        Text("안녕하세요, 샘플 음성입니다.")
+                            .font(.system(size: settings.translatedFontSize))
+                            .foregroundColor(settings.translatedFontColor)
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(settings.backgroundColor.opacity(settings.backgroundOpacity))
+                )
             }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(settings.backgroundColor.opacity(settings.backgroundOpacity))
-        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Live preview of subtitle appearance")
     }
