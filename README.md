@@ -1,4 +1,4 @@
-English | [한국어](README.ko.md) | [中文](README.zh.md) | [日本語](README.ja.md)
+🇬🇧 English | [🇰🇷 한국어](README.ko.md) | [🇨🇳 中文](README.zh.md) | [🇯🇵 日本語](README.ja.md)
 
 # OST — On-Screen Translator
 
@@ -9,6 +9,8 @@ Captures system audio, transcribes speech using Apple's Speech framework, and di
 ## Screenshots
 
 ![Translation overlay on YouTube video](assets/overlay-demo.png)
+
+![Split mode — separate recognition and translation windows](assets/overlay-demo-split-mode.png)
 
 <details>
 <summary>More screenshots</summary>
