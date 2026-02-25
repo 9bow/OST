@@ -174,6 +174,10 @@ final class AppState: ObservableObject {
             lastConsumedTail = ""
             liveText = ""
             await changeSourceLanguage(to: target.speechLocale, useOnDevice: speechRecognizer.currentOnDeviceSetting)
+            // Reconfigure translation source language to match detected language
+            if let currentTarget = translationService.configuration?.target {
+                translationService.configure(source: target.translationLocale, target: currentTarget)
+            }
         }
     }
 
