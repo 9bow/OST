@@ -6,7 +6,7 @@ set -euo pipefail
 
 APP_NAME="OST"
 BUNDLE_ID="com.ost.on-screen-translator"
-VERSION="1.0.0"
+VERSION="0.0.4"
 BUILD_VERSION="1"
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
