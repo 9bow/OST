@@ -47,10 +47,14 @@ struct TranslationOverlayView: View {
                 isAtBottom = newValue
             }
             .onChange(of: appState.subtitleEntries.count) { _, _ in
-                withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                if isAtBottom || settings.overlay2Locked {
+                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
             }
             .onChange(of: appState.liveTranslatedText) { _, _ in
-                withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                if isAtBottom || settings.overlay2Locked {
+                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
             }
         }
         .padding(12)

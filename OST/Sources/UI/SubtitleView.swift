@@ -40,10 +40,14 @@ struct SubtitleView: View {
                 isAtBottom = newValue
             }
             .onChange(of: appState.subtitleEntries.count) { _, _ in
-                withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                if isAtBottom || settings.overlayLocked {
+                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
             }
             .onChange(of: appState.liveText) { _, _ in
-                withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                if isAtBottom || settings.overlayLocked {
+                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
             }
         }
         .padding(12)
