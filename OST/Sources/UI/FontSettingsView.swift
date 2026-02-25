@@ -111,13 +111,13 @@ struct FontSettingsView: View {
             Section("Display Mode") {
                 Picker("Mode", selection: $settings.overlayDisplayMode) {
                     Text("Combined").tag("combined")
-                    Text("Split (Recognition + Translation)").tag("split")
+                    Text("Split (Transcription + Translation)").tag("split")
                 }
                 .pickerStyle(.menu)
 
                 Text(settings.overlayDisplayMode == "split"
-                    ? "Two separate windows: recognition text and translated text."
-                    : "Single window showing both recognition and translation.")
+                    ? "Two separate windows: transcription and translation."
+                    : "Single window showing both transcription and translation.")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -130,7 +130,7 @@ struct FontSettingsView: View {
                 .accessibilityLabel("Reset all overlay windows to default position and size")
             }
 
-            Section("Overlay Window") {
+            Section(settings.overlayDisplayMode == "split" ? "Transcription Window" : "Overlay Window") {
                 Toggle("Lock Overlay", isOn: Binding(
                     get: { settings.overlayLocked },
                     set: { newValue in
@@ -145,7 +145,7 @@ struct FontSettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
 
-                Button("Reset Overlay Position & Size") {
+                Button("Reset Position & Size") {
                     onResetOverlay?()
                 }
                 .accessibilityLabel("Reset overlay window to default position and size")
@@ -153,7 +153,7 @@ struct FontSettingsView: View {
 
             if settings.overlayDisplayMode == "split" {
                 Section("Translation Window") {
-                    Toggle("Lock Translation Window", isOn: Binding(
+                    Toggle("Lock Overlay", isOn: Binding(
                         get: { settings.overlay2Locked },
                         set: { newValue in
                             settings.overlay2Locked = newValue
@@ -167,7 +167,7 @@ struct FontSettingsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
 
-                    Button("Reset Translation Window Position & Size") {
+                    Button("Reset Position & Size") {
                         onResetOverlay2?()
                     }
                     .accessibilityLabel("Reset translation window to default position and size")
@@ -188,9 +188,9 @@ struct FontSettingsView: View {
             if settings.overlayDisplayMode == "split" {
                 HStack(spacing: 8) {
                     if settings.showOriginalText {
-                        // Recognition window
+                        // Transcription window
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Recognition")
+                            Text("Transcription")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                             Text("Hello, this is sample speech.")

@@ -52,6 +52,22 @@ struct LanguagePickerView: View {
                 .keyboardShortcut("s", modifiers: [.command, .shift])
                 .disabled(settings.sourceLanguage == settings.targetLanguage || settings.sourceLanguage == "auto")
             }
+
+            Section("Speech Recognition") {
+                Toggle("On-device recognition", isOn: $settings.useOnDeviceRecognition)
+                    .accessibilityLabel("On-device recognition toggle")
+                    .accessibilityHint("When enabled, speech recognition runs locally on device")
+
+                if settings.useOnDeviceRecognition {
+                    Text("Requires on-device speech model download.\nSystem Settings > Keyboard > Dictation > Languages")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Server-based recognition requires Siri & Dictation to be enabled and an internet connection.")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+            }
         }
         .formStyle(.grouped)
         .task(id: "\(settings.sourceLanguage)-\(settings.targetLanguage)") {
