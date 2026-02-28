@@ -174,6 +174,10 @@ final class AppState: ObservableObject {
             lastConsumedTail = ""
             liveText = ""
             await changeSourceLanguage(to: target.speechLocale, useOnDevice: speechRecognizer.currentOnDeviceSetting)
+            // Reconfigure translation source language to match detected language
+            if let currentTarget = translationService.configuration?.target {
+                translationService.configure(source: target.translationLocale, target: currentTarget)
+            }
         }
     }
 
@@ -221,12 +225,13 @@ final class AppState: ObservableObject {
 
                 // Show only the unconsumed portion as live text
                 if !self.lastConsumedPartial.isEmpty && currentText.hasPrefix(self.lastConsumedPartial) {
-                    self.liveText = String(currentText.dropFirst(self.lastConsumedPartial.count)).trimmingCharacters(in: .whitespaces)
+                    let tail = String(currentText.dropFirst(self.lastConsumedPartial.count)).trimmingCharacters(in: .whitespaces)
+                    self.liveText = self.stripLeadingPunctuation(tail)
                 } else if self.lastConsumedPartial.isEmpty {
                     // After restart, check for overlap with previous session's tail
                     if !self.lastConsumedTail.isEmpty {
                         let stripped = self.stripOverlap(newText: currentText, tail: self.lastConsumedTail)
-                        self.liveText = stripped
+                        self.liveText = self.stripLeadingPunctuation(stripped)
                         if stripped != currentText {
                             // We found overlap; track what we've consumed from the new session
                             let overlapLength = currentText.count - stripped.count
@@ -234,7 +239,7 @@ final class AppState: ObservableObject {
                             AppLogger.shared.log("Stripped overlap: \(overlapLength) chars from new session", category: .speech)
                         }
                     } else {
-                        self.liveText = currentText
+                        self.liveText = self.stripLeadingPunctuation(currentText)
                     }
                     // Clear tail after first use in new session (unconditional)
                     self.lastConsumedTail = ""
@@ -244,11 +249,25 @@ final class AppState: ObservableObject {
                     let common = self.findCommonPrefix(currentText, self.lastConsumedPartial)
                     if common.count > 10 {
                         self.lastConsumedPartial = common
-                        self.liveText = String(currentText.dropFirst(common.count)).trimmingCharacters(in: .whitespaces)
+                        let tail = String(currentText.dropFirst(common.count)).trimmingCharacters(in: .whitespaces)
+                        self.liveText = self.stripLeadingPunctuation(tail)
                     } else {
-                        // Completely different text (e.g. language change)
-                        self.lastConsumedPartial = ""
-                        self.liveText = currentText
+                        // Check if consumed text reappears at the END of reformulated text
+                        // (recognizer prepended new content before already-consumed text)
+                        let trimmedConsumed = self.lastConsumedPartial.trimmingCharacters(in: .whitespaces)
+                        let trimmedCurrent = currentText.trimmingCharacters(in: .whitespaces)
+                        if !trimmedConsumed.isEmpty && trimmedCurrent.hasSuffix(trimmedConsumed) {
+                            let newPart = String(trimmedCurrent.dropLast(trimmedConsumed.count))
+                            self.liveText = self.stripLeadingPunctuation(newPart)
+                            // Do NOT update lastConsumedPartial here: newPart is still live/unconsumed.
+                            // Overwriting with currentText would cause newPart to be silently dropped
+                            // on the next sink call when currentText extends.
+                            AppLogger.shared.log("Reformulation suffix stripped: \(trimmedConsumed.count) chars", category: .speech)
+                        } else {
+                            // Completely different text (e.g. language change)
+                            self.lastConsumedPartial = ""
+                            self.liveText = self.stripLeadingPunctuation(currentText)
+                        }
                     }
                 }
 
@@ -313,10 +332,11 @@ final class AppState: ObservableObject {
 
         let chunks = splitIntoChunks(text)
         for sentence in chunks {
-            guard !isPunctuationOnly(sentence), !isDuplicateEntry(sentence) else { continue }
-            let entry = SubtitleEntry(timestamp: Date(), recognized: sentence, isFinal: true)
+            let cleaned = stripLeadingPunctuation(sentence)
+            guard !isPunctuationOnly(cleaned), !isDuplicateEntry(cleaned) else { continue }
+            let entry = SubtitleEntry(timestamp: Date(), recognized: cleaned, isFinal: true)
             subtitleEntries.append(entry)
-            translateEntry(id: entry.id, text: sentence)
+            translateEntry(id: entry.id, text: cleaned)
         }
         trimEntries()
     }
@@ -350,10 +370,11 @@ final class AppState: ObservableObject {
         guard !sentences.isEmpty else { return }
 
         for sentence in sentences {
-            guard !isPunctuationOnly(sentence), !isDuplicateEntry(sentence) else { continue }
-            let entry = SubtitleEntry(timestamp: Date(), recognized: sentence, isFinal: true)
+            let cleaned = stripLeadingPunctuation(sentence)
+            guard !isPunctuationOnly(cleaned), !isDuplicateEntry(cleaned) else { continue }
+            let entry = SubtitleEntry(timestamp: Date(), recognized: cleaned, isFinal: true)
             subtitleEntries.append(entry)
-            translateEntry(id: entry.id, text: sentence)
+            translateEntry(id: entry.id, text: cleaned)
         }
         trimEntries()
 
@@ -379,10 +400,11 @@ final class AppState: ObservableObject {
         AppLogger.shared.log("Consuming remaining text before reset: \"\(text)\"", category: .speech)
         let chunks = splitIntoChunks(text)
         for sentence in chunks {
-            guard !isPunctuationOnly(sentence), !isDuplicateEntry(sentence) else { continue }
-            let entry = SubtitleEntry(timestamp: Date(), recognized: sentence, isFinal: true)
+            let cleaned = stripLeadingPunctuation(sentence)
+            guard !isPunctuationOnly(cleaned), !isDuplicateEntry(cleaned) else { continue }
+            let entry = SubtitleEntry(timestamp: Date(), recognized: cleaned, isFinal: true)
             subtitleEntries.append(entry)
-            translateEntry(id: entry.id, text: sentence)
+            translateEntry(id: entry.id, text: cleaned)
         }
         trimEntries()
     }
@@ -453,6 +475,16 @@ final class AppState: ObservableObject {
             endIndex = aIdx
         }
         return String(a[..<endIndex])
+    }
+
+    /// Strips leading punctuation characters (commas, periods, etc.) and all leading whitespace (including newlines) from text.
+    private func stripLeadingPunctuation(_ text: String) -> String {
+        var result = text[...]
+        while let first = result.unicodeScalars.first,
+              CharacterSet.punctuationCharacters.union(.whitespacesAndNewlines).contains(first) {
+            result = result.dropFirst()
+        }
+        return String(result)
     }
 
     /// Returns true if text is only punctuation/whitespace and should not be a subtitle entry.

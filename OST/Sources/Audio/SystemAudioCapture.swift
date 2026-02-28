@@ -26,14 +26,22 @@ final class SystemAudioCapture: NSObject, @unchecked Sendable {
 
     // MARK: - Private State
 
-    private var stream: SCStream?
-    private var continuation: AsyncStream<CMSampleBuffer>.Continuation?
+    private var _stream: SCStream?
+    private var stream: SCStream? {
+        get { stateLock.withLock { _stream } }
+        set { stateLock.withLock { _stream = newValue } }
+    }
+    private var _continuation: AsyncStream<CMSampleBuffer>.Continuation?
+    private var continuation: AsyncStream<CMSampleBuffer>.Continuation? {
+        get { stateLock.withLock { _continuation } }
+        set { stateLock.withLock { _continuation = newValue } }
+    }
     private(set) var audioBuffers: AsyncStream<CMSampleBuffer>?
-    private let bufferLock = NSLock()
+    private let stateLock = NSLock()
     private var _bufferCount: Int = 0
     private var bufferCount: Int {
-        get { bufferLock.withLock { _bufferCount } }
-        set { bufferLock.withLock { _bufferCount = newValue } }
+        get { stateLock.withLock { _bufferCount } }
+        set { stateLock.withLock { _bufferCount = newValue } }
     }
 
     /// Requests permission if needed, then starts capturing system audio.

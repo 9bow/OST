@@ -1,4 +1,4 @@
-[English](README.md) | [한국어](README.ko.md) | **中文** | [日本語](README.ja.md)
+[🇬🇧 English](README.md) | [🇰🇷 한국어](README.ko.md) | 🇨🇳 **中文** | [🇯🇵 日本語](README.ja.md)
 
 # OST — On-Screen Translator
 
@@ -9,6 +9,8 @@ macOS 实时语音识别与翻译叠加层应用。
 ## 截图
 
 ![YouTube 视频上的翻译叠加层](assets/overlay-demo.png)
+
+![分屏模式 — 独立的识别窗口和翻译窗口](assets/overlay-demo-split-mode.png)
 
 <details>
 <summary>更多截图</summary>

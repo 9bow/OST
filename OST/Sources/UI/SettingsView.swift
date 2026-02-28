@@ -59,22 +59,6 @@ private struct DebugSettingsView: View {
 
     var body: some View {
         Form {
-            Section("Speech Recognition") {
-                Toggle("On-device recognition", isOn: $settings.useOnDeviceRecognition)
-                    .accessibilityLabel("On-device recognition toggle")
-                    .accessibilityHint("When enabled, speech recognition runs locally on device")
-
-                if settings.useOnDeviceRecognition {
-                    Text("Requires on-device speech model download.\nSystem Settings > Keyboard > Dictation > Languages")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } else {
-                    Text("Server-based recognition requires Siri & Dictation to be enabled and an internet connection.")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                }
-            }
-
             Section("Session Recording") {
                 Toggle("Save session history", isOn: $settings.saveSessionHistory)
                     .accessibilityLabel("Save session history toggle")
@@ -123,7 +107,7 @@ private struct PrerequisitesView: View {
                 prerequisiteRow(
                     icon: "arrow.down.circle",
                     title: "On-Device Speech Model",
-                    description: "Download the speech model for your source language for faster, offline recognition.",
+                    description: "Download the speech model for your source language for faster, offline transcription.",
                     action: "System Settings > Keyboard > Dictation > Languages",
                     url: "x-apple.systempreferences:com.apple.preference.keyboard"
                 )
@@ -142,7 +126,7 @@ private struct PrerequisitesView: View {
                     .font(.caption)
                 Text("• On first launch, macOS will prompt for Screen Recording and Speech Recognition permissions.")
                     .font(.caption)
-                Text("• If on-device speech model is not available, server-based recognition is used (requires internet).")
+                Text("• If on-device speech model is not available, server-based transcription is used (requires internet).")
                     .font(.caption)
                 Text("• If Translation framework session is unavailable, Google Translate API is used as fallback.")
                     .font(.caption)
@@ -187,9 +171,15 @@ private struct AboutView: View {
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("Real-time speech recognition and translation overlay.")
+            Text("Real-time speech transcription and translation overlay.")
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+
+            if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+                Text("Version \(version)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
 
             Text("macOS 15.0+")
                 .font(.caption)

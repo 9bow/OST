@@ -29,7 +29,7 @@ enum SpeechRecognizerError: LocalizedError {
 
 /// Wraps SFSpeechRecognizer to perform on-device speech recognition from CMSampleBuffer input.
 @MainActor
-final class SpeechRecognizer: ObservableObject {
+final class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDelegate {
 
     // MARK: - Published State
 
@@ -50,6 +50,11 @@ final class SpeechRecognizer: ObservableObject {
     private var currentLocale: Locale
     private(set) var useOnDevice: Bool = true
     private var isActive: Bool = false
+    private var taskGeneration: Int = 0
+    private var taskCycleCount: Int = 0
+    private var restartRetryCount: Int = 0
+    private static let maxCyclesBeforeRecreate = 5
+    private static let maxRestartRetries = 3
 
     var currentOnDeviceSetting: Bool { useOnDevice }
 
@@ -57,7 +62,23 @@ final class SpeechRecognizer: ObservableObject {
 
     init(locale: Locale = Locale(identifier: "en-US")) {
         self.currentLocale = locale
+        super.init()
         self.recognizer = SFSpeechRecognizer(locale: locale)
+        self.recognizer?.delegate = self
+    }
+
+    // MARK: - SFSpeechRecognizerDelegate
+
+    nonisolated func speechRecognizer(_ speechRecognizer: SFSpeechRecognizer,
+                                       availabilityDidChange available: Bool) {
+        Task { @MainActor in
+            if available && self.isActive && self.recognitionTask == nil {
+                AppLogger.shared.log("Recognizer became available, restarting", category: .speech)
+                self.restartRecognition()
+            } else if !available {
+                AppLogger.shared.log("Recognizer became unavailable", category: .speech)
+            }
+        }
     }
 
     // MARK: - Public Interface
@@ -67,12 +88,14 @@ final class SpeechRecognizer: ObservableObject {
         try await requestAuthorization()
         self.useOnDevice = useOnDevice
         self.isActive = true
+        self.taskCycleCount = 0
         try beginRecognitionTask()
     }
 
     /// Stops recognition and clears volatile state.
     func stopRecognition() {
         isActive = false
+        taskGeneration += 1
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
         recognitionRequest = nil
@@ -84,6 +107,15 @@ final class SpeechRecognizer: ObservableObject {
     // MARK: - Recognition Task
 
     private func beginRecognitionTask() throws {
+        // Periodically recreate recognizer to prevent resource exhaustion
+        taskCycleCount += 1
+        if taskCycleCount > Self.maxCyclesBeforeRecreate {
+            AppLogger.shared.log("Recreating recognizer after \(taskCycleCount - 1) cycles", category: .speech)
+            recognizer = SFSpeechRecognizer(locale: currentLocale)
+            recognizer?.delegate = self
+            taskCycleCount = 1
+        }
+
         guard let recognizer, recognizer.isAvailable else {
             AppLogger.shared.log("Speech recognizer unavailable for locale: \(currentLocale.identifier)", category: .error)
             throw SpeechRecognizerError.recognizerUnavailable
@@ -107,11 +139,18 @@ final class SpeechRecognizer: ObservableObject {
         oldRequest?.endAudio()
         oldTask?.cancel()
 
-        AppLogger.shared.log("Starting recognition task (onDevice: \(useOnDevice))", category: .speech)
+        // Increment generation so stale callbacks from cancelled tasks are ignored
+        taskGeneration += 1
+        let generation = taskGeneration
+
+        AppLogger.shared.log("Starting recognition task (onDevice: \(useOnDevice), cycle: \(taskCycleCount))", category: .speech)
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
             Task { @MainActor in
+                // Ignore callbacks from old/cancelled tasks
+                guard self.taskGeneration == generation else { return }
+
                 if let result {
                     let text = result.bestTranscription.formattedString
                     self.currentText = text
@@ -144,9 +183,19 @@ final class SpeechRecognizer: ObservableObject {
         AppLogger.shared.log("Restarting recognition...", category: .speech)
         do {
             try beginRecognitionTask()
+            restartRetryCount = 0
         } catch {
-            AppLogger.shared.log("Restart failed: \(error.localizedDescription)", category: .error)
-            recognitionError = error
+            restartRetryCount += 1
+            if restartRetryCount <= Self.maxRestartRetries {
+                AppLogger.shared.log("Restart failed (attempt \(restartRetryCount)/\(Self.maxRestartRetries)), retrying in 2s: \(error.localizedDescription)", category: .error)
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(2))
+                    self?.restartRecognition()
+                }
+            } else {
+                AppLogger.shared.log("Restart failed after \(Self.maxRestartRetries) attempts: \(error.localizedDescription)", category: .error)
+                recognitionError = error
+            }
         }
     }
 
@@ -161,6 +210,7 @@ final class SpeechRecognizer: ObservableObject {
         stopRecognition()
         currentLocale = locale
         recognizer = SFSpeechRecognizer(locale: locale)
+        recognizer?.delegate = self
         finalizedText = ""
         if wasRecognizing {
             try await startRecognition(useOnDevice: useOnDevice)

@@ -21,6 +21,11 @@ final class TranslationService: ObservableObject {
         AppLogger.shared.log("Translation session stored", category: .translation)
     }
 
+    /// Clears the session reference to prevent stale usage after overlay is hidden.
+    func invalidateSession() {
+        session = nil
+    }
+
     func translate(_ text: String) async throws -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
@@ -43,7 +48,12 @@ final class TranslationService: ObservableObject {
 
         guard let url = URL(string: urlString) else { return text }
 
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await URLSession.shared.data(from: url)
+
+        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+            AppLogger.shared.log("Fallback translation HTTP \(httpResponse.statusCode)", category: .error)
+            return text
+        }
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [Any],
               let sentences = json.first as? [Any] else {

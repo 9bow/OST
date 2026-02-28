@@ -75,6 +75,7 @@ struct OSTApp: App {
 
     private func stopCapture() async {
         await appState.stopCapture()
+        appState.translationService.invalidateSession()
         windowManager.hideOverlay()
     }
 
