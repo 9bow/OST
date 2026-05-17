@@ -42,7 +42,7 @@ ruby -e 'require "yaml"' || fail "ruby yaml support is required for YAML syntax 
 command -v plutil >/dev/null || fail "plutil is required for plist validation"
 command -v git >/dev/null || fail "git is required for repository hygiene checks"
 [[ -x /usr/libexec/PlistBuddy ]] || fail "PlistBuddy is required for plist value checks"
-git check-ignore -q OST.xcodeproj \
+git check-ignore -q OST.xcodeproj/ \
     || fail "generated OST.xcodeproj must stay ignored; build.sh is the supported build path"
 for ignored_path in .test-tmp/ OST.zip release-zip-check ref-project/ DerivedData/ xcuserdata/ OST.xcworkspace/ .omc/; do
     git check-ignore -q "$ignored_path" \
