@@ -1,6 +1,5 @@
 import Foundation
 import SwiftUI
-import CoreMedia
 import Combine
 import NaturalLanguage
 
@@ -23,6 +22,7 @@ final class AppState: ObservableObject {
     @Published private(set) var subtitleEntries: [SubtitleEntry] = []
     @Published private(set) var liveText: String = ""
     @Published private(set) var liveTranslatedText: String = ""
+    @Published private(set) var isStartingCapture: Bool = false
     @Published var errorMessage: String? = nil
 
     // MARK: - Pipeline Components
@@ -30,7 +30,7 @@ final class AppState: ObservableObject {
     private let audioCapture = SystemAudioCapture()
     private let speechRecognizer: SpeechRecognizer
     let translationService = TranslationService()
-    let sessionRecorder = SessionRecorder()
+    let sessionRecorder: SessionRecorder
 
     // MARK: - Private State
 
@@ -46,17 +46,26 @@ final class AppState: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var autoDetectEnabled: Bool = false
     private var hasDetectedLanguage: Bool = false
-    @Published var detectedLanguageDisplay: String = ""
+    private var autoDetectGeneration: Int = 0
+    @Published private(set) var detectedLanguage: SupportedLanguage?
+    var onCaptureStoppedWithError: (() -> Void)?
 
     // Settings reference for expiry/max lines
     var maxSubtitleLines: Int = 3
-    var subtitleExpirySeconds: Double = 10
-    var speechPauseSeconds: Double = 2.0
+    var subtitleExpirySeconds: Double = 20
+    var speechPauseSeconds: Double = 3.0
 
     // MARK: - Init
 
     init(locale: Locale = Locale(identifier: "en-US")) {
         self.speechRecognizer = SpeechRecognizer(locale: locale)
+        self.sessionRecorder = SessionRecorder()
+        setupTextBindings()
+    }
+
+    init(locale: Locale = Locale(identifier: "en-US"), sessionRecorder: SessionRecorder) {
+        self.speechRecognizer = SpeechRecognizer(locale: locale)
+        self.sessionRecorder = sessionRecorder
         setupTextBindings()
     }
 
@@ -65,43 +74,77 @@ final class AppState: ObservableObject {
     /// Starts system audio capture and speech recognition.
     func startCapture(saveSession: Bool = true, useOnDevice: Bool = true) async {
         guard !isCapturing else { return }
+        guard isStartingCapture else { return }
         errorMessage = nil
         saveSessionHistory = saveSession
+        resetDisplayStateForNewCapture()
 
         AppLogger.shared.log("Starting capture...", category: .app)
 
         do {
             AppLogger.shared.log("Requesting speech recognition authorization", category: .speech)
             try await speechRecognizer.startRecognition(useOnDevice: useOnDevice)
+            guard isStartingCapture else {
+                speechRecognizer.stopRecognition()
+                finishStartingCapture()
+                return
+            }
             AppLogger.shared.log("Speech recognition started", category: .speech)
 
             AppLogger.shared.log("Starting audio capture", category: .audio)
             let buffers = try await audioCapture.startCapture()
+            guard isStartingCapture else {
+                speechRecognizer.stopRecognition()
+                await audioCapture.stopCapture()
+                finishStartingCapture()
+                return
+            }
             AppLogger.shared.log("Audio capture started", category: .audio)
 
             isCapturing = true
-            lastConsumedPartial = ""
-            lastConsumedTail = ""
-            subtitleEntries = []
-            liveText = ""
             startConsumingBuffers(from: buffers)
             startExpiryTimer()
 
             if saveSession {
                 sessionRecorder.startSession()
             }
+            finishStartingCapture()
         } catch {
+            if !isStartingCapture || error is CancellationError {
+                AppLogger.shared.log("Capture start cancelled", category: .app)
+                speechRecognizer.stopRecognition()
+                await audioCapture.stopCapture()
+                finishStartingCapture()
+                return
+            }
             AppLogger.shared.log("Capture failed: \(error.localizedDescription)", category: .error)
             errorMessage = error.localizedDescription
             speechRecognizer.stopRecognition()
+            await audioCapture.stopCapture()
+            finishStartingCapture()
             return
         }
     }
 
+    func beginStartingCapture() -> Bool {
+        guard !isCapturing, !isStartingCapture else { return false }
+        isStartingCapture = true
+        return true
+    }
+
+    func finishStartingCapture() {
+        isStartingCapture = false
+    }
+
     /// Stops capture and recognition, preserving last recognized text.
     func stopCapture() async {
-        guard isCapturing else { return }
-        isCapturing = false
+        let wasStartingCapture = isStartingCapture
+        finishStartingCapture()
+        guard isCapturing || wasStartingCapture else { return }
+        if isCapturing {
+            consumeRemainingText()
+            isCapturing = false
+        }
 
         bufferConsumerTask?.cancel()
         bufferConsumerTask = nil
@@ -118,10 +161,83 @@ final class AppState: ObservableObject {
         speechRecognizer.stopRecognition()
         await audioCapture.stopCapture()
 
-        if saveSessionHistory {
+        if sessionRecorder.currentSession != nil {
             sessionRecorder.endSession()
         }
         AppLogger.shared.log("Capture stopped", category: .app)
+    }
+
+    func clearError() {
+        errorMessage = nil
+    }
+
+    func updateSubtitleSettings(maxLines: Double, expirySeconds: Double, pauseSeconds: Double) {
+        maxSubtitleLines = clampedInt(maxLines, min: 1, max: 10, fallback: 3)
+        subtitleExpirySeconds = clampedDouble(expirySeconds, min: 3, max: 60, fallback: 20)
+        speechPauseSeconds = clampedDouble(pauseSeconds, min: 0.5, max: 5, fallback: 3)
+        removeExpiredEntries()
+        trimEntries()
+    }
+
+    func updateSessionHistoryRecording(enabled: Bool) {
+        saveSessionHistory = enabled
+        guard isCapturing else { return }
+
+        if enabled {
+            if sessionRecorder.currentSession == nil {
+                sessionRecorder.startSession()
+            }
+        } else if sessionRecorder.currentSession != nil {
+            sessionRecorder.endSession()
+        }
+    }
+
+    func clearVisibleTranslationsForLanguageChange() {
+        liveTranslationTimer?.invalidate()
+        liveTranslationTimer = nil
+        liveTranslationTask?.cancel()
+        liveTranslationTask = nil
+        liveTranslatedText = ""
+
+        let visibleEntryIDs = subtitleEntries.map(\.id)
+        for index in subtitleEntries.indices {
+            subtitleEntries[index].translated = ""
+        }
+        sessionRecorder.clearCurrentTranslations(ids: visibleEntryIDs)
+    }
+
+    func refreshVisibleTranslationsForLanguageChange() {
+        let entriesToTranslate = subtitleEntries.map { (id: $0.id, text: $0.recognized) }
+        let shouldUpdateSessionHistory = sessionRecorder.currentSession != nil
+        for entry in entriesToTranslate where !entry.text.isEmpty {
+            translateEntry(
+                id: entry.id,
+                text: entry.text,
+                recordSessionEntry: false,
+                updateSessionHistory: shouldUpdateSessionHistory,
+                updateCurrentSessionOnly: true
+            )
+        }
+        debounceLiveTranslation()
+    }
+
+    private func clampedInt(_ value: Double, min: Int, max: Int, fallback: Int) -> Int {
+        guard value.isFinite else { return fallback }
+        return Swift.min(max, Swift.max(min, Int(value)))
+    }
+
+    private func clampedDouble(_ value: Double, min: Double, max: Double, fallback: Double) -> Double {
+        guard value.isFinite else { return fallback }
+        return Swift.min(max, Swift.max(min, value))
+    }
+
+    private func resetDisplayStateForNewCapture() {
+        lastConsumedPartial = ""
+        lastConsumedTail = ""
+        lastSinkCurrentText = ""
+        subtitleEntries = []
+        liveText = ""
+        liveTranslatedText = ""
     }
 
     /// Changes the speech recognition language.
@@ -132,14 +248,25 @@ final class AppState: ObservableObject {
             lastConsumedTail = ""
         } catch {
             errorMessage = error.localizedDescription
+            if isCapturing {
+                await stopCapture()
+            }
         }
     }
 
     /// Enables automatic language detection from initial speech.
     func enableAutoDetect() {
+        autoDetectGeneration += 1
         autoDetectEnabled = true
         hasDetectedLanguage = false
-        detectedLanguageDisplay = ""
+        detectedLanguage = nil
+    }
+
+    func disableAutoDetect() {
+        autoDetectGeneration += 1
+        autoDetectEnabled = false
+        hasDetectedLanguage = false
+        detectedLanguage = nil
     }
 
     /// Detects language from partial text using NLLanguageRecognizer.
@@ -162,28 +289,46 @@ final class AppState: ObservableObject {
         }
 
         guard let target = matched else { return }
+        let detectionGeneration = autoDetectGeneration
         hasDetectedLanguage = true
-        detectedLanguageDisplay = target.displayName
+        detectedLanguage = target
 
         AppLogger.shared.log("Auto-detected language: \(target.displayName) (confidence: \(confidence))", category: .speech)
 
         Task {
-            guard self.isCapturing else { return }
+            guard self.isCapturing,
+                  self.autoDetectEnabled,
+                  self.autoDetectGeneration == detectionGeneration else { return }
             // Reset consumed state BEFORE language change to avoid stale tracking
             lastConsumedPartial = ""
             lastConsumedTail = ""
             liveText = ""
             await changeSourceLanguage(to: target.speechLocale, useOnDevice: speechRecognizer.currentOnDeviceSetting)
+            if self.errorMessage != nil {
+                self.onCaptureStoppedWithError?()
+                return
+            }
             // Reconfigure translation source language to match detected language
-            if let currentTarget = translationService.configuration?.target {
+            guard self.isCapturing,
+                  self.errorMessage == nil,
+                  self.autoDetectEnabled,
+                  self.autoDetectGeneration == detectionGeneration else { return }
+            if let currentTarget = translationService.targetLanguage {
+                clearVisibleTranslationsForLanguageChange()
                 translationService.configure(source: target.translationLocale, target: currentTarget)
+                _ = await translationService.waitForSessionReady(timeout: 1.0)
+                guard self.isCapturing,
+                      self.errorMessage == nil,
+                      self.autoDetectEnabled,
+                      self.autoDetectGeneration == detectionGeneration else { return }
+                refreshVisibleTranslationsForLanguageChange()
             }
         }
     }
 
     // MARK: - Private Helpers
 
-    private func startConsumingBuffers(from buffers: AsyncStream<CMSampleBuffer>) {
+    private func startConsumingBuffers(from buffers: AsyncStream<AudioSampleBuffer>) {
         AppLogger.shared.log("Buffer consumer task started", category: .audio)
         var count = 0
         bufferConsumerTask = Task { [weak self] in
@@ -194,9 +339,14 @@ final class AppState: ObservableObject {
                 if count <= 3 || count % 100 == 0 {
                     AppLogger.shared.log("Forwarding buffer #\(count) to speech recognizer", category: .speech)
                 }
-                self.speechRecognizer.append(buffer)
+                self.speechRecognizer.append(buffer.sampleBuffer)
             }
             AppLogger.shared.log("Buffer consumer ended after \(count) buffers", category: .audio)
+            if !Task.isCancelled && self.isCapturing {
+                self.errorMessage = "Audio capture stopped unexpectedly."
+                await self.stopCapture()
+                self.onCaptureStoppedWithError?()
+            }
         }
     }
 
@@ -208,12 +358,17 @@ final class AppState: ObservableObject {
 
                 // Handle recognizer restart (currentText cleared) BEFORE updating liveText
                 if currentText.isEmpty {
+                    let previousText = self.lastSinkCurrentText
                     if !self.liveText.isEmpty {
                         self.consumeRemainingText()
+                        self.lastConsumedPartial = previousText
                     }
-                    // Save tail of consumed text for overlap detection on next session
-                    self.lastConsumedTail = String(self.lastConsumedPartial.suffix(60))
+                    if !self.lastConsumedPartial.isEmpty {
+                        // Save tail of consumed text for overlap detection on next session.
+                        self.lastConsumedTail = String(self.lastConsumedPartial.suffix(60))
+                    }
                     self.lastConsumedPartial = ""
+                    self.lastSinkCurrentText = ""
                     self.liveText = ""
                     self.liveTranslatedText = ""
                     self.liveTranslationTimer?.invalidate()
@@ -236,13 +391,14 @@ final class AppState: ObservableObject {
                             // We found overlap; track what we've consumed from the new session
                             let overlapLength = currentText.count - stripped.count
                             self.lastConsumedPartial = String(currentText.prefix(overlapLength))
+                            self.lastConsumedTail = ""
                             AppLogger.shared.log("Stripped overlap: \(overlapLength) chars from new session", category: .speech)
+                        } else if currentText.count >= self.lastConsumedTail.count {
+                            self.lastConsumedTail = ""
                         }
                     } else {
                         self.liveText = self.stripLeadingPunctuation(currentText)
                     }
-                    // Clear tail after first use in new session (unconditional)
-                    self.lastConsumedTail = ""
                 } else {
                     // currentText diverged from lastConsumedPartial (recognizer reformulation)
                     // Find longest common prefix to avoid re-showing already-consumed text
@@ -280,6 +436,22 @@ final class AppState: ObservableObject {
                 self.debounceLiveTranslation()
             }
             .store(in: &cancellables)
+
+        speechRecognizer.$recognitionError
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] error in
+                guard let self, let error else { return }
+                AppLogger.shared.log("Recognition stopped after retries: \(error.localizedDescription)", category: .error)
+                self.errorMessage = error.localizedDescription
+                if self.isCapturing {
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        await self.stopCapture()
+                        self.onCaptureStoppedWithError?()
+                    }
+                }
+            }
+            .store(in: &cancellables)
     }
 
     private func debounceLiveTranslation() {
@@ -289,20 +461,25 @@ final class AppState: ObservableObject {
             liveTranslationTask?.cancel()
             return
         }
-        liveTranslationTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
+        liveTranslationTimer = Self.scheduledCommonTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.isCapturing, !self.liveText.isEmpty else { return }
                 let textToTranslate = self.liveText
+                let generation = self.translationService.configurationGeneration
                 self.liveTranslationTask?.cancel()
                 self.liveTranslationTask = Task { [weak self] in
                     guard let self else { return }
                     do {
-                        let result = try await self.translationService.translate(textToTranslate)
-                        if !Task.isCancelled {
+                        let result = try await self.translationService.translate(textToTranslate, generation: generation)
+                        if !Task.isCancelled && self.liveText == textToTranslate {
                             self.liveTranslatedText = result
                         }
+                    } catch TranslationServiceError.staleConfiguration {
+                        return
+                    } catch is CancellationError {
+                        return
                     } catch {
-                        // Translation failed silently — keep previous liveTranslatedText
+                        AppLogger.shared.log("Live translation failed: \(error.localizedDescription)", category: .error)
                     }
                 }
             }
@@ -311,7 +488,7 @@ final class AppState: ObservableObject {
 
     private func resetSpeechPauseTimer() {
         speechPauseTimer?.invalidate()
-        speechPauseTimer = Timer.scheduledTimer(withTimeInterval: speechPauseSeconds, repeats: false) { [weak self] _ in
+        speechPauseTimer = Self.scheduledCommonTimer(withTimeInterval: speechPauseSeconds, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.handlePartialTextStabilized()
@@ -410,18 +587,37 @@ final class AppState: ObservableObject {
     }
 
     /// Translates a subtitle entry individually.
-    private func translateEntry(id: UUID, text: String) {
+    private func translateEntry(
+        id: UUID,
+        text: String,
+        recordSessionEntry: Bool = true,
+        updateSessionHistory: Bool = true,
+        updateCurrentSessionOnly: Bool = false
+    ) {
+        if recordSessionEntry && saveSessionHistory {
+            sessionRecorder.record(id: id, recognized: text, translated: "")
+        }
+
+        let generation = translationService.configurationGeneration
         Task { [weak self] in
             guard let self else { return }
             do {
-                let result = try await self.translationService.translate(text)
+                let result = try await self.translationService.translate(text, generation: generation)
                 if let idx = self.subtitleEntries.firstIndex(where: { $0.id == id }) {
                     self.subtitleEntries[idx].translated = result
                     AppLogger.shared.log("Translated: \(text) → \(result)", category: .translation)
-                    if self.saveSessionHistory {
-                        self.sessionRecorder.record(recognized: text, translated: result)
+                }
+                if updateSessionHistory {
+                    if updateCurrentSessionOnly {
+                        self.sessionRecorder.updateCurrentTranslation(id: id, translated: result)
+                    } else {
+                        self.sessionRecorder.updateTranslation(id: id, translated: result)
                     }
                 }
+            } catch TranslationServiceError.staleConfiguration {
+                return
+            } catch is CancellationError {
+                return
             } catch {
                 AppLogger.shared.log("Translation failed: \(error.localizedDescription)", category: .error)
             }
@@ -448,11 +644,20 @@ final class AppState: ObservableObject {
                 chunks.append(sentence)
             } else {
                 var current = ""
-                for word in sentence.split(separator: " ") {
-                    let candidate = current.isEmpty ? String(word) : current + " " + word
+                for wordSubstring in sentence.split(separator: " ") {
+                    let word = String(wordSubstring)
+                    if word.count > maxChars {
+                        if !current.isEmpty {
+                            chunks.append(current)
+                            current = ""
+                        }
+                        chunks.append(contentsOf: splitLongToken(word, maxChars: maxChars))
+                        continue
+                    }
+                    let candidate = current.isEmpty ? word : current + " " + word
                     if candidate.count > maxChars && !current.isEmpty {
                         chunks.append(current)
-                        current = String(word)
+                        current = word
                     } else {
                         current = candidate
                     }
@@ -461,6 +666,17 @@ final class AppState: ObservableObject {
             }
         }
         return chunks.isEmpty ? [text] : chunks
+    }
+
+    private func splitLongToken(_ text: String, maxChars: Int) -> [String] {
+        var chunks: [String] = []
+        var start = text.startIndex
+        while start < text.endIndex {
+            let end = text.index(start, offsetBy: maxChars, limitedBy: text.endIndex) ?? text.endIndex
+            chunks.append(String(text[start..<end]))
+            start = end
+        }
+        return chunks
     }
 
     /// Returns the longest common prefix between two strings.
@@ -495,8 +711,8 @@ final class AppState: ObservableObject {
 
     /// Checks if the same recognized text was very recently added to avoid duplicates from recognizer reformulation.
     private func isDuplicateEntry(_ text: String) -> Bool {
-        let cutoff = Date().addingTimeInterval(-5.0)
-        return subtitleEntries.suffix(4).contains { $0.recognized == text && $0.timestamp > cutoff }
+        let cutoff = Date().addingTimeInterval(-2.0)
+        return subtitleEntries.suffix(2).contains { $0.recognized == text && $0.timestamp > cutoff }
     }
 
     /// Finds and strips overlapping text between the tail of previously consumed text and the start of new text.
@@ -505,9 +721,26 @@ final class AppState: ObservableObject {
         let tailWords = tail.split(separator: " ")
         for startIdx in 0..<tailWords.count {
             let suffix = tailWords[startIdx...].joined(separator: " ")
+            guard suffix.count >= 4 else { continue }
             if newText.hasPrefix(suffix) {
                 return String(newText.dropFirst(suffix.count)).trimmingCharacters(in: .whitespaces)
             }
+        }
+        return stripCharacterOverlap(newText: newText, tail: tail)
+    }
+
+    private func stripCharacterOverlap(newText: String, tail: String) -> String {
+        // Fallback for CJK and URL-like text where word boundaries are not useful.
+        let maxOverlap = Swift.min(tail.count, newText.count)
+        guard maxOverlap >= 4 else { return newText }
+
+        var overlapLength = maxOverlap
+        while overlapLength >= 4 {
+            let suffix = String(tail.suffix(overlapLength))
+            if newText.hasPrefix(suffix) {
+                return String(newText.dropFirst(suffix.count)).trimmingCharacters(in: .whitespaces)
+            }
+            overlapLength -= 1
         }
         return newText
     }
@@ -521,11 +754,21 @@ final class AppState: ObservableObject {
 
     private func startExpiryTimer() {
         expiryTimer?.invalidate()
-        expiryTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        expiryTimer = Self.scheduledCommonTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.removeExpiredEntries()
             }
         }
+    }
+
+    private static func scheduledCommonTimer(
+        withTimeInterval interval: TimeInterval,
+        repeats: Bool,
+        block: @escaping @Sendable (Timer) -> Void
+    ) -> Timer {
+        let timer = Timer(timeInterval: interval, repeats: repeats, block: block)
+        RunLoop.main.add(timer, forMode: .common)
+        return timer
     }
 
     private func removeExpiredEntries() {

@@ -1,23 +1,48 @@
-import Translation
+@preconcurrency import Translation
 
-struct TranslationConfig {
-    let sourceLanguage: Locale.Language
-    let targetLanguage: Locale.Language
-    let isAvailable: Bool
+enum TranslationAvailabilityState {
+    case installed
+    case supported
+    case unsupported
+}
 
-    static func checkAvailability(
+enum TranslationConfig {
+    static func isSameLanguagePair(
         source: Locale.Language,
         target: Locale.Language
-    ) async -> Bool {
+    ) -> Bool {
+        guard source.languageCode?.identifier == target.languageCode?.identifier else {
+            return false
+        }
+
+        let sourceScript = source.script?.identifier
+        let targetScript = target.script?.identifier
+        if sourceScript != nil || targetScript != nil {
+            return sourceScript == targetScript
+        }
+
+        return true
+    }
+
+    static func availabilityState(
+        source: Locale.Language,
+        target: Locale.Language
+    ) async -> TranslationAvailabilityState {
+        if isSameLanguagePair(source: source, target: target) {
+            return .installed
+        }
+
         let availability = LanguageAvailability()
         let status = await availability.status(from: source, to: target)
         switch status {
-        case .installed, .supported:
-            return true
+        case .installed:
+            return .installed
+        case .supported:
+            return .supported
         case .unsupported:
-            return false
+            return .unsupported
         @unknown default:
-            return false
+            return .unsupported
         }
     }
 }

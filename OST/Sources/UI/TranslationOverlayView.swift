@@ -1,5 +1,5 @@
 import SwiftUI
-import Translation
+@preconcurrency import Translation
 
 /// Overlay view for split mode: shows only translated text.
 /// Hosts the .translationTask modifier to receive translation sessions.
@@ -11,6 +11,8 @@ struct TranslationOverlayView: View {
     @State private var isAtBottom = true
 
     var body: some View {
+        let generation = translationService.configurationGeneration
+
         ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: !settings.overlay2Locked) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -18,7 +20,7 @@ struct TranslationOverlayView: View {
 
                     ForEach(appState.subtitleEntries) { entry in
                         Text(entry.translated.isEmpty ? "..." : entry.translated)
-                            .font(.system(size: settings.translatedFontSize))
+                            .font(.system(size: settings.safeTranslatedFontSize))
                             .foregroundColor(entry.translated.isEmpty
                                 ? settings.translatedFontColor.opacity(0.4)
                                 : settings.translatedFontColor)
@@ -28,8 +30,15 @@ struct TranslationOverlayView: View {
 
                     if !appState.liveTranslatedText.isEmpty {
                         Text(appState.liveTranslatedText)
-                            .font(.system(size: settings.translatedFontSize))
+                            .font(.system(size: settings.safeTranslatedFontSize))
                             .foregroundColor(settings.translatedFontColor.opacity(0.6))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if let message = translationStatusText {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundColor(.orange.opacity(0.9))
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -46,12 +55,17 @@ struct TranslationOverlayView: View {
             } action: { _, newValue in
                 isAtBottom = newValue
             }
-            .onChange(of: appState.subtitleEntries.count) { _, _ in
+            .onChange(of: appState.subtitleEntries.map(\.id)) { _, _ in
                 if isAtBottom || settings.overlay2Locked {
                     withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
             }
             .onChange(of: appState.liveTranslatedText) { _, _ in
+                if isAtBottom || settings.overlay2Locked {
+                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
+            }
+            .onChange(of: appState.subtitleEntries.map(\.translated)) { _, _ in
                 if isAtBottom || settings.overlay2Locked {
                     withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
@@ -62,7 +76,7 @@ struct TranslationOverlayView: View {
         .clipped()
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(settings.backgroundColor.opacity(settings.backgroundOpacity))
+                .fill(settings.backgroundColor.opacity(settings.safeBackgroundOpacity))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
@@ -73,10 +87,20 @@ struct TranslationOverlayView: View {
                     lineWidth: settings.overlay2Locked ? 1 : 2
                 )
         )
-        .animation(.easeInOut(duration: 0.2), value: appState.subtitleEntries.count)
+        .animation(.easeInOut(duration: 0.2), value: appState.subtitleEntries.map(\.id))
         .translationTask(translationService.configuration) { session in
             AppLogger.shared.log("Translation session delivered by .translationTask", category: .translation)
-            translationService.handleSession(session)
+            translationService.handleSession(session, generation: generation)
         }
+    }
+
+    private var translationStatusText: String? {
+        if let error = translationService.lastErrorMessage, !error.isEmpty {
+            return error
+        }
+        if let status = translationService.statusMessage, !status.isEmpty {
+            return status
+        }
+        return nil
     }
 }

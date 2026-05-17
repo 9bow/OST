@@ -6,16 +6,18 @@ struct FontSettingsView: View {
     var onResetOverlay2: (() -> Void)?
     var onToggleOverlayLock: ((Bool) -> Void)?
     var onToggleOverlay2Lock: ((Bool) -> Void)?
+    var onSubtitleSettingsChanged: (() -> Void)?
+    var onDisplayModeChanged: (() -> Void)?
 
     var body: some View {
         Form {
             Section("Original Text (Speech)") {
                 HStack {
                     Text("Size")
-                    Slider(value: $settings.fontSize, in: 12...72, step: 1)
+                    Slider(value: fontSizeBinding, in: 12...72, step: 1)
                         .accessibilityLabel("Font size")
-                        .accessibilityValue("\(Int(settings.fontSize)) points")
-                    Text("\(Int(settings.fontSize))pt")
+                        .accessibilityValue("\(Int(settings.safeFontSize)) points")
+                    Text("\(Int(settings.safeFontSize))pt")
                         .monospacedDigit()
                         .frame(width: 40, alignment: .trailing)
                 }
@@ -29,10 +31,10 @@ struct FontSettingsView: View {
             Section("Translated Text") {
                 HStack {
                     Text("Size")
-                    Slider(value: $settings.translatedFontSize, in: 12...72, step: 1)
+                    Slider(value: translatedFontSizeBinding, in: 12...72, step: 1)
                         .accessibilityLabel("Translated font size")
-                        .accessibilityValue("\(Int(settings.translatedFontSize)) points")
-                    Text("\(Int(settings.translatedFontSize))pt")
+                        .accessibilityValue("\(Int(settings.safeTranslatedFontSize)) points")
+                    Text("\(Int(settings.safeTranslatedFontSize))pt")
                         .monospacedDigit()
                         .frame(width: 40, alignment: .trailing)
                 }
@@ -53,11 +55,11 @@ struct FontSettingsView: View {
 
                 HStack {
                     Text("Opacity")
-                    Slider(value: $settings.backgroundOpacity, in: 0...1, step: 0.05)
+                    Slider(value: backgroundOpacityBinding, in: 0...1, step: 0.05)
                         .accessibilityLabel("Background opacity")
-                        .accessibilityValue("\(Int(settings.backgroundOpacity * 100)) percent")
+                        .accessibilityValue("\(Int(settings.safeBackgroundOpacity * 100)) percent")
                         .accessibilityHint("Drag to change background transparency")
-                    Text("\(Int(settings.backgroundOpacity * 100))%")
+                    Text("\(Int(settings.safeBackgroundOpacity * 100))%")
                         .monospacedDigit()
                         .frame(width: 40, alignment: .trailing)
                 }
@@ -66,30 +68,30 @@ struct FontSettingsView: View {
             Section("Subtitle Display") {
                 HStack {
                     Text("Max Lines")
-                    Slider(value: $settings.maxSubtitleLines, in: 1...10, step: 1)
+                    Slider(value: maxSubtitleLinesBinding, in: 1...10, step: 1)
                         .accessibilityLabel("Maximum subtitle lines")
-                        .accessibilityValue("\(Int(settings.maxSubtitleLines)) lines")
-                    Text("\(Int(settings.maxSubtitleLines))")
+                        .accessibilityValue("\(Int(settings.safeMaxSubtitleLines)) lines")
+                    Text("\(Int(settings.safeMaxSubtitleLines))")
                         .monospacedDigit()
                         .frame(width: 24, alignment: .trailing)
                 }
 
                 HStack {
                     Text("Expiry")
-                    Slider(value: $settings.subtitleExpirySeconds, in: 3...60, step: 1)
+                    Slider(value: subtitleExpiryBinding, in: 3...60, step: 1)
                         .accessibilityLabel("Subtitle expiry time")
-                        .accessibilityValue("\(Int(settings.subtitleExpirySeconds)) seconds")
-                    Text("\(Int(settings.subtitleExpirySeconds))s")
+                        .accessibilityValue("\(Int(settings.safeSubtitleExpirySeconds)) seconds")
+                    Text("\(Int(settings.safeSubtitleExpirySeconds))s")
                         .monospacedDigit()
                         .frame(width: 32, alignment: .trailing)
                 }
 
                 HStack {
                     Text("Speech Pause")
-                    Slider(value: $settings.speechPauseSeconds, in: 0.5...5, step: 0.5)
+                    Slider(value: speechPauseBinding, in: 0.5...5, step: 0.5)
                         .accessibilityLabel("Speech pause detection time")
-                        .accessibilityValue(String(format: "%.1f seconds", settings.speechPauseSeconds))
-                    Text(String(format: "%.1fs", settings.speechPauseSeconds))
+                        .accessibilityValue(String(format: "%.1f seconds", settings.safeSpeechPauseSeconds))
+                    Text(String(format: "%.1fs", settings.safeSpeechPauseSeconds))
                         .monospacedDigit()
                         .frame(width: 36, alignment: .trailing)
                 }
@@ -98,18 +100,26 @@ struct FontSettingsView: View {
                     .foregroundColor(.secondary)
             }
 
-            Section("Visibility") {
-                Toggle("Show Original Text", isOn: $settings.showOriginalText)
-                    .accessibilityLabel("Show original text toggle")
-                    .accessibilityHint("Toggle display of recognized speech text")
+            if settings.overlayDisplayMode == "combined" {
+                Section("Visibility") {
+                    Toggle("Show Original Text", isOn: showOriginalTextBinding)
+                        .accessibilityLabel("Show original text toggle")
+                        .accessibilityHint("Toggle display of recognized speech text")
 
-                Toggle("Show Translation", isOn: $settings.showTranslation)
-                    .accessibilityLabel("Show translation toggle")
-                    .accessibilityHint("Toggle display of translated text")
+                    Toggle("Show Translation", isOn: showTranslationBinding)
+                        .accessibilityLabel("Show translation toggle")
+                        .accessibilityHint("Toggle display of translated text")
+                }
             }
 
             Section("Display Mode") {
-                Picker("Mode", selection: $settings.overlayDisplayMode) {
+                Picker("Mode", selection: Binding(
+                    get: { settings.overlayDisplayMode },
+                    set: { newValue in
+                        settings.overlayDisplayMode = newValue
+                        onDisplayModeChanged?()
+                    }
+                )) {
                     Text("Combined").tag("combined")
                     Text("Split (Transcription + Translation)").tag("split")
                 }
@@ -123,9 +133,6 @@ struct FontSettingsView: View {
 
                 Button("Reset All Overlay Windows") {
                     onResetOverlay?()
-                    if settings.overlayDisplayMode == "split" {
-                        onResetOverlay2?()
-                    }
                 }
                 .accessibilityLabel("Reset all overlay windows to default position and size")
             }
@@ -145,7 +152,7 @@ struct FontSettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
 
-                Button("Reset Position & Size") {
+                Button(settings.overlayDisplayMode == "split" ? "Reset Both Windows" : "Reset Position & Size") {
                     onResetOverlay?()
                 }
                 .accessibilityLabel("Reset overlay window to default position and size")
@@ -167,7 +174,7 @@ struct FontSettingsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
 
-                    Button("Reset Position & Size") {
+                    Button("Reset Both Windows") {
                         onResetOverlay2?()
                     }
                     .accessibilityLabel("Reset translation window to default position and size")
@@ -187,54 +194,48 @@ struct FontSettingsView: View {
         Group {
             if settings.overlayDisplayMode == "split" {
                 HStack(spacing: 8) {
-                    if settings.showOriginalText {
-                        // Transcription window
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Transcription")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                            Text("Hello, this is sample speech.")
-                                .font(.system(size: settings.fontSize))
-                                .foregroundColor(settings.fontColor)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(settings.backgroundColor.opacity(settings.backgroundOpacity))
-                        )
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Transcription")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("Hello, this is sample speech.")
+                            .font(.system(size: settings.safeFontSize))
+                            .foregroundColor(settings.fontColor)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(settings.backgroundColor.opacity(settings.safeBackgroundOpacity))
+                    )
 
-                    if settings.showTranslation {
-                        // Translation window
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Translation")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                            Text("안녕하세요, 샘플 음성입니다.")
-                                .font(.system(size: settings.translatedFontSize))
-                                .foregroundColor(settings.translatedFontColor)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(settings.backgroundColor.opacity(settings.backgroundOpacity))
-                        )
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Translation")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("안녕하세요, 샘플 음성입니다.")
+                            .font(.system(size: settings.safeTranslatedFontSize))
+                            .foregroundColor(settings.translatedFontColor)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(settings.backgroundColor.opacity(settings.safeBackgroundOpacity))
+                    )
                 }
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     if settings.showOriginalText {
                         Text("Hello, this is sample speech.")
-                            .font(.system(size: settings.fontSize))
+                            .font(.system(size: settings.safeFontSize))
                             .foregroundColor(settings.fontColor)
                     }
                     if settings.showTranslation {
                         Text("안녕하세요, 샘플 음성입니다.")
-                            .font(.system(size: settings.translatedFontSize))
+                            .font(.system(size: settings.safeTranslatedFontSize))
                             .foregroundColor(settings.translatedFontColor)
                     }
                 }
@@ -242,11 +243,86 @@ struct FontSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(settings.backgroundColor.opacity(settings.backgroundOpacity))
+                        .fill(settings.backgroundColor.opacity(settings.safeBackgroundOpacity))
                 )
             }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Live preview of subtitle appearance")
+    }
+
+    private var showOriginalTextBinding: Binding<Bool> {
+        Binding(
+            get: { settings.showOriginalText },
+            set: { newValue in
+                settings.showOriginalText = newValue
+                if !settings.showOriginalText && !settings.showTranslation {
+                    settings.showTranslation = true
+                }
+            }
+        )
+    }
+
+    private var showTranslationBinding: Binding<Bool> {
+        Binding(
+            get: { settings.showTranslation },
+            set: { newValue in
+                settings.showTranslation = newValue
+                if !settings.showOriginalText && !settings.showTranslation {
+                    settings.showOriginalText = true
+                }
+            }
+        )
+    }
+
+    private var fontSizeBinding: Binding<Double> {
+        Binding(
+            get: { settings.safeFontSize },
+            set: { settings.fontSize = $0 }
+        )
+    }
+
+    private var translatedFontSizeBinding: Binding<Double> {
+        Binding(
+            get: { settings.safeTranslatedFontSize },
+            set: { settings.translatedFontSize = $0 }
+        )
+    }
+
+    private var backgroundOpacityBinding: Binding<Double> {
+        Binding(
+            get: { settings.safeBackgroundOpacity },
+            set: { settings.backgroundOpacity = $0 }
+        )
+    }
+
+    private var maxSubtitleLinesBinding: Binding<Double> {
+        Binding(
+            get: { settings.safeMaxSubtitleLines },
+            set: { newValue in
+                settings.maxSubtitleLines = newValue
+                onSubtitleSettingsChanged?()
+            }
+        )
+    }
+
+    private var subtitleExpiryBinding: Binding<Double> {
+        Binding(
+            get: { settings.safeSubtitleExpirySeconds },
+            set: { newValue in
+                settings.subtitleExpirySeconds = newValue
+                onSubtitleSettingsChanged?()
+            }
+        )
+    }
+
+    private var speechPauseBinding: Binding<Double> {
+        Binding(
+            get: { settings.safeSpeechPauseSeconds },
+            set: { newValue in
+                settings.speechPauseSeconds = newValue
+                onSubtitleSettingsChanged?()
+            }
+        )
     }
 }

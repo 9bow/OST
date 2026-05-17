@@ -3,6 +3,7 @@ import SwiftUI
 struct LogViewerView: View {
     @ObservedObject var logger: AppLogger
     @State private var filterCategory: LogEntry.LogCategory?
+    @State private var isAtBottom = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,6 +36,7 @@ struct LogViewerView: View {
 
             Button("Clear") {
                 logger.clear()
+                isAtBottom = true
             }
             .accessibilityLabel("Clear logs")
         }
@@ -70,8 +72,13 @@ struct LogViewerView: View {
                 .id(entry.id)
             }
             .listStyle(.plain)
-            .onChange(of: filteredEntries.count) {
-                if let last = filteredEntries.last {
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 10
+            } action: { _, newValue in
+                isAtBottom = newValue
+            }
+            .onChange(of: filteredEntries.last?.id) {
+                if isAtBottom, let last = filteredEntries.last {
                     withAnimation {
                         proxy.scrollTo(last.id, anchor: .bottom)
                     }

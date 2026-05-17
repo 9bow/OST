@@ -4,6 +4,7 @@ import AppKit
 struct SessionHistoryView: View {
     @ObservedObject var recorder: SessionRecorder
     @State private var selectedSession: RecordedSession?
+    @State private var showClearHistoryConfirmation = false
 
     var body: some View {
         HSplitView {
@@ -13,6 +14,15 @@ struct SessionHistoryView: View {
                 .frame(minWidth: 350)
         }
         .frame(width: 650, height: 450)
+        .alert("Clear Session History?", isPresented: $showClearHistoryConfirmation) {
+            Button("Clear All", role: .destructive) {
+                recorder.clearHistory()
+                selectedSession = nil
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes all saved sessions.")
+        }
     }
 
     // MARK: - Session List
@@ -24,8 +34,7 @@ struct SessionHistoryView: View {
                     .font(.headline)
                 Spacer()
                 Button("Clear All") {
-                    recorder.clearHistory()
-                    selectedSession = nil
+                    showClearHistoryConfirmation = true
                 }
                 .font(.caption)
                 .disabled(recorder.pastSessions.isEmpty)
@@ -80,7 +89,7 @@ struct SessionHistoryView: View {
 
     private var sessionDetail: some View {
         VStack(spacing: 0) {
-            if let session = selectedSession {
+            if let session = displayedSession {
                 HStack {
                     Text(session.formattedDate)
                         .font(.headline)
@@ -129,6 +138,14 @@ struct SessionHistoryView: View {
         }
     }
 
+    private var displayedSession: RecordedSession? {
+        guard let selectedSession else { return nil }
+        if let current = recorder.currentSession, current.id == selectedSession.id {
+            return current
+        }
+        return recorder.pastSessions.first { $0.id == selectedSession.id }
+    }
+
     // MARK: - Export
 
     private func exportSession(_ session: RecordedSession) {
@@ -145,11 +162,12 @@ struct SessionHistoryView: View {
         panel.begin { response in
             hostWindow?.level = originalLevel ?? .normal
             guard response == .OK, let url = panel.url else { return }
-            let text = sessionText(session)
+            let sessionToExport = latestSession(id: session.id) ?? session
+            let text = sessionText(sessionToExport)
             do {
                 try text.write(to: url, atomically: true, encoding: .utf8)
             } catch {
-                AppLogger.shared.log("Session export failed: \(error.localizedDescription)", category: .app)
+                AppLogger.shared.log("Session export failed: \(error.localizedDescription)", category: .error)
                 let alert = NSAlert()
                 alert.messageText = "Export Failed"
                 alert.informativeText = error.localizedDescription
@@ -157,6 +175,13 @@ struct SessionHistoryView: View {
                 alert.runModal()
             }
         }
+    }
+
+    private func latestSession(id: UUID) -> RecordedSession? {
+        if let current = recorder.currentSession, current.id == id {
+            return current
+        }
+        return recorder.pastSessions.first { $0.id == id }
     }
 
     private func sessionText(_ session: RecordedSession) -> String {

@@ -58,6 +58,7 @@ final class OverlayWindow: NSPanel {
         isOpaque = false
         hasShadow = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        minSize = NSSize(width: min(200, initialFrame.width), height: min(100, initialFrame.height))
 
         // Apply initial lock state
         let locked = isLocked
@@ -114,29 +115,26 @@ final class OverlayWindow: NSPanel {
         isMovableByWindowBackground = !locked
     }
 
-    func resetFrame() {
-        let defaultFrame: NSRect
-        switch role {
-        case .combined, .recognition:
-            defaultFrame = NSRect(x: 200, y: 200, width: 600, height: 200)
-        case .translation:
-            defaultFrame = NSRect(x: 200, y: 450, width: 600, height: 200)
-        }
-        setFrame(defaultFrame, display: true, animate: true)
-    }
-
     /// Ensures the frame is at least partially visible on screen.
     private static func clampToScreen(_ frame: NSRect) -> NSRect {
         guard let screen = NSScreen.main?.visibleFrame else { return frame }
         var f = frame
-        // Ensure minimum size
-        f.size.width = max(f.size.width, 200)
-        f.size.height = max(f.size.height, 100)
-        // Clamp position so at least 100px is visible on screen
-        let minVisible: CGFloat = 100
-        f.origin.x = max(screen.minX - f.width + minVisible, min(f.origin.x, screen.maxX - minVisible))
-        f.origin.y = max(screen.minY, min(f.origin.y, screen.maxY - 40))
+        f.origin.x = finite(f.origin.x, fallback: screen.midX - 300)
+        f.origin.y = finite(f.origin.y, fallback: screen.minY + 200)
+        f.size.width = finite(f.size.width, fallback: 600)
+        f.size.height = finite(f.size.height, fallback: 200)
+        // Keep restored windows fully visible, even after display changes.
+        let minWidth = min(200, screen.width)
+        let minHeight = min(100, screen.height)
+        f.size.width = min(max(f.size.width, minWidth), screen.width)
+        f.size.height = min(max(f.size.height, minHeight), screen.height)
+        f.origin.x = max(screen.minX, min(f.origin.x, screen.maxX - f.width))
+        f.origin.y = max(screen.minY, min(f.origin.y, screen.maxY - f.height))
         return f
+    }
+
+    private static func finite(_ value: CGFloat, fallback: CGFloat) -> CGFloat {
+        value.isFinite ? value : fallback
     }
 
     deinit {

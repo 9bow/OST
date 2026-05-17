@@ -15,7 +15,7 @@ struct RecognitionOverlayView: View {
 
                     ForEach(appState.subtitleEntries) { entry in
                         Text(entry.recognized)
-                            .font(.system(size: settings.fontSize))
+                            .font(.system(size: settings.safeFontSize))
                             .foregroundColor(settings.fontColor)
                             .fixedSize(horizontal: false, vertical: true)
                             .transition(.opacity)
@@ -23,7 +23,7 @@ struct RecognitionOverlayView: View {
 
                     if !appState.liveText.isEmpty {
                         Text(appState.liveText)
-                            .font(.system(size: settings.fontSize))
+                            .font(.system(size: settings.safeFontSize))
                             .foregroundColor(settings.fontColor.opacity(0.6))
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -41,7 +41,7 @@ struct RecognitionOverlayView: View {
             } action: { _, newValue in
                 isAtBottom = newValue
             }
-            .onChange(of: appState.subtitleEntries.count) { _, _ in
+            .onChange(of: appState.subtitleEntries.map(\.id)) { _, _ in
                 if isAtBottom || settings.overlayLocked {
                     withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
@@ -57,7 +57,7 @@ struct RecognitionOverlayView: View {
         .clipped()
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(settings.backgroundColor.opacity(settings.backgroundOpacity))
+                .fill(settings.backgroundColor.opacity(settings.safeBackgroundOpacity))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
@@ -68,6 +68,6 @@ struct RecognitionOverlayView: View {
                     lineWidth: settings.overlayLocked ? 1 : 2
                 )
         )
-        .animation(.easeInOut(duration: 0.2), value: appState.subtitleEntries.count)
+        .animation(.easeInOut(duration: 0.2), value: appState.subtitleEntries.map(\.id))
     }
 }

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 
+@MainActor
 enum AccessibilityManager {
 
     // MARK: - VoiceOver Announcements

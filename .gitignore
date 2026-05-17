@@ -1,5 +1,8 @@
 # Build output
 build/
+.test-tmp/
+OST.zip
+release-zip-check
 
 # Xcode
 OST.xcodeproj/
