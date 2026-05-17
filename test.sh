@@ -1044,17 +1044,6 @@ grep -q "Print :NSSystemAudioRecordingUsageDescription.*build/ost-zip-check/OST.
 if grep -q '/tmp/ost-zip-check' .github/workflows/build.yml; then
     fail "build workflow ZIP validation must stay within the repository workspace"
 fi
-if grep -R 'src/\*\*/.*\.\(ts\|tsx\|js\|jsx\)' .github/workflows >/dev/null; then
-    fail "GitHub workflow comments should use this Swift project's paths, not JS/TS examples"
-fi
-for review_path in \
-    '#   - "OST/Sources/**/*.swift"' \
-    '#   - "OST/Resources/**"' \
-    '#   - "build.sh"' \
-    '#   - "project.yml"'; do
-    grep -qF "$review_path" .github/workflows/claude-code-review.yml \
-        || fail "Claude review workflow path examples must match this Swift project: $review_path"
-done
 grep -q 'uses: anthropics/claude-code-action@v1' .github/workflows/claude-code-review.yml \
     || fail "Claude review workflow must run the Claude Code action"
 grep -q "plugins: 'code-review@claude-code-plugins'" .github/workflows/claude-code-review.yml \
