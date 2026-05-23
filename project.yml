@@ -24,7 +24,7 @@ targets:
         INFOPLIST_FILE: OST/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: OST/Resources/OST.entitlements
         PRODUCT_NAME: OST
-        MARKETING_VERSION: "0.0.4"
+        MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: false
         SWIFT_EMIT_LOC_STRINGS: "YES"
