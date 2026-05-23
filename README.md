@@ -31,7 +31,7 @@ Captures system audio, transcribes speech using Apple's Speech framework, and di
 
 ## Disclaimer
 
-This project was entirely written by [Claude](https://claude.ai/) (Anthropic's AI assistant). The code, build scripts, documentation, and CI/CD configuration were all generated through AI-assisted development. While functional, the code has not undergone formal human code review — use at your own discretion.
+This project was created and maintained through AI-assisted development. The code, build scripts, documentation, and CI/CD configuration should be reviewed and tested carefully before production use.
 
 ## Features
 
@@ -59,7 +59,7 @@ This project was entirely written by [Claude](https://claude.ai/) (Anthropic's A
 
 ### Option A: Download Pre-built Binary (Recommended)
 
-1. Download `OST.zip` from the [latest release](https://github.com/9bow/OST.git/releases/latest)
+1. Download `OST.zip` from the [latest release](https://github.com/9bow/OST/releases/latest)
 2. Unzip and move `OST.app` to your Applications folder
 3. If macOS blocks the app on first run:
    ```bash
@@ -80,14 +80,15 @@ See the [Build](#build) section below for full instructions.
 
 ### Step 1: Grant Required Permissions
 
-On first launch, macOS will prompt for the following permissions. If not prompted, enable them manually:
+On first launch, macOS may prompt for the following permissions. If not prompted, enable them manually:
 
 | Permission | Purpose | How to Enable |
 |---|---|---|
-| **Screen Recording** | System audio capture via ScreenCaptureKit | System Settings > Privacy & Security > Screen Recording > Enable OST |
+| **Screen Recording** | System audio capture via ScreenCaptureKit | System Settings > Privacy & Security > Screen & System Audio Recording > Enable OST |
+| **System Audio Recording** | System audio capture permission on macOS 15+ | System Settings > Privacy & Security > Screen & System Audio Recording > Enable OST |
 | **Speech Recognition** | SFSpeechRecognizer access | System Settings > Privacy & Security > Speech Recognition > Enable OST |
 
-> After granting permissions, you may need to restart OST for changes to take effect.
+> If you enable permissions manually in System Settings, restart OST for changes to take effect.
 
 ### Step 2: Enable Siri & Dictation
 
@@ -103,7 +104,7 @@ For faster, offline, and more reliable recognition:
 
 1. Open **System Settings > General > Keyboard > Dictation**
 2. Under **Languages**, download the speech model for your source language (e.g., English, Korean, Japanese)
-3. After download, enable **"On-device recognition"** in OST Settings > Languages tab
+3. After download, confirm **"On-device recognition"** remains enabled in OST Settings > Languages tab
 
 > Without the on-device model, server-based recognition is used. This requires internet and may have higher latency.
 
@@ -129,6 +130,9 @@ cd OST
 # Type-check only (no binary)
 ./build.sh --typecheck
 
+# Run project checks
+./test.sh
+
 # Clean build
 ./build.sh --clean
 
@@ -137,6 +141,8 @@ open build/OST.app
 ```
 
 No Xcode project is required. The build script compiles all Swift sources via `xcrun swiftc`.
+`./test.sh` uses system command-line tools only and runs documentation, workflow, regression, behavioral, and type-check gates.
+For release checks that require real macOS permissions, audio capture, Apple Translation language packs, or online fallback network behavior, use [docs/manual-qa.md](docs/manual-qa.md).
 
 > If macOS blocks the app on first run, execute:
 > ```bash
@@ -149,7 +155,7 @@ No Xcode project is required. The build script compiles all Swift sources via `x
 
 1. Click the **captions bubble icon** in the menu bar
 2. Select source and target languages (or use "Auto" for automatic detection)
-3. Click **Start** to begin capturing system audio
+3. Click **Start Capture** to begin capturing system audio
 4. The overlay window(s) will appear with live transcription and translation
 
 ### Overlay Controls
@@ -170,14 +176,16 @@ No Xcode project is required. The build script compiles all Swift sources via `x
 Configure in **Settings > Display > Mode**:
 
 - **Combined**: Single window showing both original and translated text
-- **Split**: Two separate windows — recognition (original text) and translation. Each window can be independently positioned and resized. Lock/Unlock applies to both windows simultaneously
+- **Split**: Default mode with two separate windows — recognition (original text) and translation. Each window can be independently positioned and resized. Menu bar Lock/Unlock applies to both windows simultaneously; Settings can lock each window independently
 
 ### Tips
 
-- **Speech Pause**: Adjust in Settings > Display > "Speech Pause" slider. Shorter values finalize text faster; longer values wait for natural sentence endings
-- **Subtitle Expiry**: Old subtitles automatically fade after the configured time (default 10s)
-- **Max Lines**: Control how many subtitle entries are visible at once
-- **Session History**: View past transcription sessions via menu bar > Session History. Sessions can be exported for reference
+- **Speech Pause**: Adjust in Settings > Display > "Speech Pause" slider (default 3s). Shorter values finalize text faster; longer values wait for natural sentence endings
+- **Subtitle Expiry**: Old subtitles automatically fade after the configured time (default 20s)
+- **Max Lines**: Control how many subtitle entries are visible at once (default 3)
+- **Session History**: Enabled by default. View past transcription sessions via menu bar > Session History, export them for reference, or disable saving in Settings > Debug
+- **On-device recognition**: Enabled by default. If the selected language model is unavailable or you prefer server-based recognition, disable it in Settings > Languages
+- **Online fallback translation**: Disabled by default. Enable it in Settings > Languages only if you want OST to send text to Google Translate when Apple Translation is unavailable
 
 ## Architecture
 
@@ -204,11 +212,11 @@ OST/Sources/
 
 | Problem | Solution |
 |---|---|
-| No audio captured | Grant Screen Recording permission in System Settings, then restart OST |
+| No audio captured | Grant Screen Recording and System Audio Recording permissions. If you changed them in System Settings, restart OST |
 | Speech recognition not working | Grant Speech Recognition permission; ensure Siri & Dictation is enabled |
-| Translation not appearing | Download translation language pack in System Settings > Translation Languages |
+| Translation not appearing | Download the translation language pack, or enable online fallback in Settings > Languages if sending text to Google Translate is acceptable |
 | Overlay invisible but blocking clicks | Use Settings > Display > "Reset All Overlay Windows" to restore default position |
-| macOS blocks the app | Run `xattr -dr com.apple.quarantine build/OST.app` |
+| macOS blocks the app | Run `xattr -dr com.apple.quarantine /Applications/OST.app` for an installed app, or `xattr -dr com.apple.quarantine build/OST.app` for a local build |
 | On-device recognition produces no results | Download the speech model for your language in System Settings > Keyboard > Dictation |
 
 ## Known Issues

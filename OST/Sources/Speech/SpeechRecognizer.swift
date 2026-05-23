@@ -86,10 +86,23 @@ final class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDele
     /// Requests authorization if needed, then begins recognition.
     func startRecognition(useOnDevice: Bool = true) async throws {
         try await requestAuthorization()
+        recognitionError = nil
         self.useOnDevice = useOnDevice
         self.isActive = true
         self.taskCycleCount = 0
-        try beginRecognitionTask()
+        self.restartRetryCount = 0
+        do {
+            try beginRecognitionTask()
+        } catch {
+            isActive = false
+            taskGeneration += 1
+            recognitionRequest?.endAudio()
+            recognitionTask?.cancel()
+            recognitionRequest = nil
+            recognitionTask = nil
+            currentText = ""
+            throw error
+        }
     }
 
     /// Stops recognition and clears volatile state.
@@ -118,6 +131,11 @@ final class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDele
 
         guard let recognizer, recognizer.isAvailable else {
             AppLogger.shared.log("Speech recognizer unavailable for locale: \(currentLocale.identifier)", category: .error)
+            taskGeneration += 1
+            recognitionRequest?.endAudio()
+            recognitionTask?.cancel()
+            recognitionRequest = nil
+            recognitionTask = nil
             throw SpeechRecognizerError.recognizerUnavailable
         }
 
@@ -126,8 +144,12 @@ final class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDele
         // and audio buffers from startConsumingBuffers are lost.
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
-        if useOnDevice && recognizer.supportsOnDeviceRecognition {
+        let supportsOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
+        let usesOnDeviceRecognition = useOnDevice && supportsOnDeviceRecognition
+        if usesOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true
+        } else if useOnDevice {
+            AppLogger.shared.log("On-device recognition unavailable for \(currentLocale.identifier); using server-based recognition", category: .speech)
         }
         request.addsPunctuation = true
 
@@ -143,7 +165,7 @@ final class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDele
         taskGeneration += 1
         let generation = taskGeneration
 
-        AppLogger.shared.log("Starting recognition task (onDevice: \(useOnDevice), cycle: \(taskCycleCount))", category: .speech)
+        AppLogger.shared.log("Starting recognition task (onDevice: \(usesOnDeviceRecognition), supportsOnDevice: \(supportsOnDeviceRecognition), cycle: \(taskCycleCount))", category: .speech)
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
@@ -156,7 +178,7 @@ final class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDele
                     self.currentText = text
                     if result.isFinal {
                         AppLogger.shared.log("Final: \"\(text)\"", category: .speech)
-                        self.finalizedText = ""
+                        self.finalizedText = text
                         self.currentText = ""
                         self.restartRecognition()
                         return
@@ -164,6 +186,7 @@ final class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDele
                     // Partial result with concurrent error — task is dying
                     if error != nil {
                         AppLogger.shared.log("Partial result with error, restarting", category: .speech)
+                        self.currentText = ""
                         self.restartRecognition()
                         return
                     }
@@ -188,12 +211,20 @@ final class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDele
             restartRetryCount += 1
             if restartRetryCount <= Self.maxRestartRetries {
                 AppLogger.shared.log("Restart failed (attempt \(restartRetryCount)/\(Self.maxRestartRetries)), retrying in 2s: \(error.localizedDescription)", category: .error)
+                let retryGeneration = taskGeneration
                 Task { @MainActor [weak self] in
                     try? await Task.sleep(for: .seconds(2))
-                    self?.restartRecognition()
+                    guard let self, self.taskGeneration == retryGeneration else { return }
+                    self.restartRecognition()
                 }
             } else {
                 AppLogger.shared.log("Restart failed after \(Self.maxRestartRetries) attempts: \(error.localizedDescription)", category: .error)
+                isActive = false
+                recognitionRequest?.endAudio()
+                recognitionTask?.cancel()
+                recognitionRequest = nil
+                recognitionTask = nil
+                currentText = ""
                 recognitionError = error
             }
         }
@@ -206,13 +237,14 @@ final class SpeechRecognizer: NSObject, ObservableObject, SFSpeechRecognizerDele
 
     /// Recreates the recognizer with a new locale and restarts recognition if active.
     func changeLanguage(locale: Locale, useOnDevice: Bool = true) async throws {
-        let wasRecognizing = recognitionTask != nil
+        let wasActive = isActive
         stopRecognition()
         currentLocale = locale
         recognizer = SFSpeechRecognizer(locale: locale)
         recognizer?.delegate = self
         finalizedText = ""
-        if wasRecognizing {
+        recognitionError = nil
+        if wasActive {
             try await startRecognition(useOnDevice: useOnDevice)
         }
     }

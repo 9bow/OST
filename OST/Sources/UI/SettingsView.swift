@@ -8,6 +8,12 @@ struct SettingsView: View {
     var onResetOverlay2: (() -> Void)?
     var onToggleOverlayLock: ((Bool) -> Void)?
     var onToggleOverlay2Lock: ((Bool) -> Void)?
+    var onSubtitleSettingsChanged: (() -> Void)?
+    var onLanguageSettingsChanged: (() -> Void)?
+    var onOnlineFallbackChanged: (() -> Void)?
+    var onSaveSessionHistoryChanged: (() -> Void)?
+    var onSessionWindowAlwaysOnTopChanged: (() -> Void)?
+    var onDisplayModeChanged: (() -> Void)?
 
     var body: some View {
         TabView {
@@ -16,13 +22,19 @@ struct SettingsView: View {
                 onResetOverlay: onResetOverlay,
                 onResetOverlay2: onResetOverlay2,
                 onToggleOverlayLock: onToggleOverlayLock,
-                onToggleOverlay2Lock: onToggleOverlay2Lock
+                onToggleOverlay2Lock: onToggleOverlay2Lock,
+                onSubtitleSettingsChanged: onSubtitleSettingsChanged,
+                onDisplayModeChanged: onDisplayModeChanged
             )
                 .tabItem {
                     Label("Display", systemImage: "textformat.size")
                 }
 
-            LanguagePickerView(settings: settings)
+            LanguagePickerView(
+                settings: settings,
+                onLanguageSettingsChanged: onLanguageSettingsChanged,
+                onOnlineFallbackChanged: onOnlineFallbackChanged
+            )
                 .tabItem {
                     Label("Languages", systemImage: "globe")
                 }
@@ -30,7 +42,9 @@ struct SettingsView: View {
             DebugSettingsView(
                 settings: settings,
                 onOpenLogs: onOpenLogs,
-                onOpenSessions: onOpenSessions
+                onOpenSessions: onOpenSessions,
+                onSaveSessionHistoryChanged: onSaveSessionHistoryChanged,
+                onSessionWindowAlwaysOnTopChanged: onSessionWindowAlwaysOnTopChanged
             )
             .tabItem {
                 Label("Debug", systemImage: "ladybug")
@@ -56,15 +70,17 @@ private struct DebugSettingsView: View {
     @ObservedObject var settings: UserSettings
     let onOpenLogs: () -> Void
     let onOpenSessions: () -> Void
+    var onSaveSessionHistoryChanged: (() -> Void)?
+    var onSessionWindowAlwaysOnTopChanged: (() -> Void)?
 
     var body: some View {
         Form {
             Section("Session Recording") {
-                Toggle("Save session history", isOn: $settings.saveSessionHistory)
+                Toggle("Save session history", isOn: saveSessionHistoryBinding)
                     .accessibilityLabel("Save session history toggle")
                     .accessibilityHint("When enabled, recognized and translated text is saved per session")
 
-                Toggle("Session window always on top", isOn: $settings.sessionWindowAlwaysOnTop)
+                Toggle("Session window always on top", isOn: sessionWindowAlwaysOnTopBinding)
                     .accessibilityLabel("Session window always on top")
             }
 
@@ -78,6 +94,26 @@ private struct DebugSettingsView: View {
         }
         .formStyle(.grouped)
     }
+
+    private var saveSessionHistoryBinding: Binding<Bool> {
+        Binding(
+            get: { settings.saveSessionHistory },
+            set: { newValue in
+                settings.saveSessionHistory = newValue
+                onSaveSessionHistoryChanged?()
+            }
+        )
+    }
+
+    private var sessionWindowAlwaysOnTopBinding: Binding<Bool> {
+        Binding(
+            get: { settings.sessionWindowAlwaysOnTop },
+            set: { newValue in
+                settings.sessionWindowAlwaysOnTop = newValue
+                onSessionWindowAlwaysOnTopChanged?()
+            }
+        )
+    }
 }
 
 // MARK: - Prerequisites Tab
@@ -90,7 +126,15 @@ private struct PrerequisitesView: View {
                     icon: "rectangle.dashed.badge.record",
                     title: "Screen Recording",
                     description: "Required for system audio capture via ScreenCaptureKit.",
-                    action: "System Settings > Privacy & Security > Screen Recording",
+                    action: "System Settings > Privacy & Security > Screen & System Audio Recording",
+                    url: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+                )
+
+                prerequisiteRow(
+                    icon: "speaker.wave.2",
+                    title: "System Audio Recording",
+                    description: "Required for system audio capture on macOS 15 or later.",
+                    action: "System Settings > Privacy & Security > Screen & System Audio Recording",
                     url: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
                 )
 
@@ -124,11 +168,11 @@ private struct PrerequisitesView: View {
             Section("Notes") {
                 Text("• macOS 15.0 (Sequoia) or later is required.")
                     .font(.caption)
-                Text("• On first launch, macOS will prompt for Screen Recording and Speech Recognition permissions.")
+                Text("• On first launch, macOS may prompt for Screen Recording, System Audio Recording, and Speech Recognition permissions.")
                     .font(.caption)
                 Text("• If on-device speech model is not available, server-based transcription is used (requires internet).")
                     .font(.caption)
-                Text("• If Translation framework session is unavailable, Google Translate API is used as fallback.")
+                Text("• Online translation fallback is only used when enabled in Languages.")
                     .font(.caption)
             }
         }

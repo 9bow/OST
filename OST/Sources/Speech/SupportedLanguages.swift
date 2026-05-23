@@ -1,5 +1,5 @@
 import SwiftUI
-import Translation
+@preconcurrency import Translation
 
 enum SupportedLanguage: String, CaseIterable, Identifiable {
     case english = "en-US"

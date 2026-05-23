@@ -7,7 +7,7 @@ options:
 
 settings:
   base:
-    SWIFT_VERSION: "5.9"
+    SWIFT_VERSION: "5"
     MACOSX_DEPLOYMENT_TARGET: "15.0"
 
 targets:
@@ -24,7 +24,7 @@ targets:
         INFOPLIST_FILE: OST/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: OST/Resources/OST.entitlements
         PRODUCT_NAME: OST
-        MARKETING_VERSION: "1.0.0"
+        MARKETING_VERSION: "0.0.4"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: false
         SWIFT_EMIT_LOC_STRINGS: "YES"

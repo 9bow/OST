@@ -13,10 +13,9 @@ APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 CONTENTS="$APP_BUNDLE/Contents"
 MACOS_DIR="$CONTENTS/MacOS"
 RESOURCES_DIR="$CONTENTS/Resources"
+ENTITLEMENTS="OST/Resources/OST.entitlements"
 
-SDK_PATH=$(xcrun --show-sdk-path)
 DEPLOY_TARGET="15.0"
-TARGET="arm64-apple-macosx${DEPLOY_TARGET}"
 SWIFT_VERSION="5"
 
 FRAMEWORKS=(
@@ -26,6 +25,7 @@ FRAMEWORKS=(
     -framework ScreenCaptureKit
     -framework CoreMedia
     -framework Translation
+    -framework NaturalLanguage
 )
 
 SOURCES=(
@@ -69,8 +69,16 @@ for arg in "$@"; do
             echo "  -h, --help   Show this help"
             exit 0
             ;;
+        *)
+            echo "Unknown option: $arg" >&2
+            echo "Run ./build.sh --help for usage." >&2
+            exit 1
+            ;;
     esac
 done
+
+SDK_PATH=$(xcrun --show-sdk-path)
+TARGET="arm64-apple-macosx${DEPLOY_TARGET}"
 
 echo "=== OST Build ==="
 echo "SDK: $SDK_PATH"
@@ -87,6 +95,9 @@ if $TYPECHECK_ONLY; then
     echo "Type-checking ${#SOURCES[@]} files..."
     xcrun swiftc \
         -swift-version "$SWIFT_VERSION" \
+        -warnings-as-errors \
+        -warn-concurrency \
+        -strict-concurrency=complete \
         -target "$TARGET" \
         -sdk "$SDK_PATH" \
         -typecheck \
@@ -98,10 +109,18 @@ fi
 # Build
 echo "Compiling ${#SOURCES[@]} files..."
 
+if [ -d "$APP_BUNDLE" ]; then
+    echo "Removing previous app bundle..."
+    rm -rf "$APP_BUNDLE"
+fi
+
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 xcrun swiftc \
     -swift-version "$SWIFT_VERSION" \
+    -warnings-as-errors \
+    -warn-concurrency \
+    -strict-concurrency=complete \
     -target "$TARGET" \
     -sdk "$SDK_PATH" \
     -o "$MACOS_DIR/$APP_NAME" \
@@ -109,6 +128,10 @@ xcrun swiftc \
     "${SOURCES[@]}"
 
 echo "Binary built: $MACOS_DIR/$APP_NAME"
+for framework in AppKit SwiftUI Speech ScreenCaptureKit CoreMedia Translation NaturalLanguage; do
+    otool -L "$MACOS_DIR/$APP_NAME" | grep -q "/${framework}.framework/" \
+        || { echo "Missing linked framework: $framework" >&2; exit 1; }
+done
 
 # Create Info.plist with resolved variables
 cat > "$CONTENTS/Info.plist" << PLIST
@@ -136,19 +159,42 @@ cat > "$CONTENTS/Info.plist" << PLIST
     <true/>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>OST needs speech recognition access to transcribe system audio in real-time.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>OST needs system audio capture access to transcribe and translate audio in real-time.</string>
     <key>NSSystemAudioRecordingUsageDescription</key>
     <string>OST needs system audio recording access to capture audio for transcription and translation.</string>
 </dict>
 </plist>
 PLIST
 
+plutil -lint "$CONTENTS/Info.plist" >/dev/null
+test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$CONTENTS/Info.plist")" = "$APP_NAME"
+test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$CONTENTS/Info.plist")" = "On-Screen Translator"
+test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$CONTENTS/Info.plist")" = "$BUNDLE_ID"
+test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$CONTENTS/Info.plist")" = "$BUILD_VERSION"
+test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$CONTENTS/Info.plist")" = "$VERSION"
+test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$CONTENTS/Info.plist")" = "$DEPLOY_TARGET"
+test "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' "$CONTENTS/Info.plist")" = "true"
+test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' "$CONTENTS/Info.plist")"
+test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSAudioCaptureUsageDescription' "$CONTENTS/Info.plist")"
+test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSSystemAudioRecordingUsageDescription' "$CONTENTS/Info.plist")"
 echo "Info.plist created with resolved variables"
 
 # Create PkgInfo
 echo -n "APPL????" > "$CONTENTS/PkgInfo"
+test -x "$MACOS_DIR/$APP_NAME"
+test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$CONTENTS/Info.plist")" = "$APP_NAME"
+test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$CONTENTS/Info.plist")" = "APPL"
+test "$(cat "$CONTENTS/PkgInfo")" = "APPL????"
 
-# Sign with ad-hoc signature (sign binary first, then bundle)
-codesign --force --deep --sign - "$APP_BUNDLE" 2>&1 || true
+# Sign and verify the app bundle with an ad-hoc signature
+plutil -lint "$ENTITLEMENTS" >/dev/null
+codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" "$APP_BUNDLE"
+codesign --verify --deep --strict "$APP_BUNDLE"
+codesign -d --entitlements :- "$APP_BUNDLE" > "$BUILD_DIR/codesign-entitlements.plist" 2>/dev/null
+plutil -lint "$BUILD_DIR/codesign-entitlements.plist" >/dev/null
+test "$(plutil -convert json -o - "$BUILD_DIR/codesign-entitlements.plist")" = "$(plutil -convert json -o - "$ENTITLEMENTS")"
+rm -f "$BUILD_DIR/codesign-entitlements.plist"
 
 # Remove quarantine attribute if present
 xattr -dr com.apple.quarantine "$APP_BUNDLE" 2>/dev/null || true

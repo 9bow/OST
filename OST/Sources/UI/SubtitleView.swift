@@ -1,5 +1,5 @@
 import SwiftUI
-import Translation
+@preconcurrency import Translation
 
 struct SubtitleView: View {
     @ObservedObject var appState: AppState
@@ -9,6 +9,8 @@ struct SubtitleView: View {
     @State private var isAtBottom = true
 
     var body: some View {
+        let generation = translationService.configurationGeneration
+
         ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: !settings.overlayLocked) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -21,8 +23,22 @@ struct SubtitleView: View {
 
                     if !appState.liveText.isEmpty && settings.showOriginalText {
                         Text(appState.liveText)
-                            .font(.system(size: settings.fontSize))
+                            .font(.system(size: settings.safeFontSize))
                             .foregroundColor(settings.fontColor.opacity(0.6))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if !appState.liveTranslatedText.isEmpty && settings.showTranslation {
+                        Text(appState.liveTranslatedText)
+                            .font(.system(size: settings.safeTranslatedFontSize))
+                            .foregroundColor(settings.translatedFontColor.opacity(0.6))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if settings.showTranslation, let message = translationStatusText {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundColor(.orange.opacity(0.9))
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -39,12 +55,22 @@ struct SubtitleView: View {
             } action: { _, newValue in
                 isAtBottom = newValue
             }
-            .onChange(of: appState.subtitleEntries.count) { _, _ in
+            .onChange(of: appState.subtitleEntries.map(\.id)) { _, _ in
                 if isAtBottom || settings.overlayLocked {
                     withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
             }
             .onChange(of: appState.liveText) { _, _ in
+                if isAtBottom || settings.overlayLocked {
+                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
+            }
+            .onChange(of: appState.liveTranslatedText) { _, _ in
+                if isAtBottom || settings.overlayLocked {
+                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
+            }
+            .onChange(of: appState.subtitleEntries.map(\.translated)) { _, _ in
                 if isAtBottom || settings.overlayLocked {
                     withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
@@ -55,7 +81,7 @@ struct SubtitleView: View {
         .clipped()
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(settings.backgroundColor.opacity(settings.backgroundOpacity))
+                .fill(settings.backgroundColor.opacity(settings.safeBackgroundOpacity))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
@@ -66,10 +92,10 @@ struct SubtitleView: View {
                     lineWidth: settings.overlayLocked ? 1 : 2
                 )
         )
-        .animation(.easeInOut(duration: 0.2), value: appState.subtitleEntries.count)
+        .animation(.easeInOut(duration: 0.2), value: appState.subtitleEntries.map(\.id))
         .translationTask(translationService.configuration) { session in
             AppLogger.shared.log("Translation session delivered by .translationTask", category: .translation)
-            translationService.handleSession(session)
+            translationService.handleSession(session, generation: generation)
         }
     }
 
@@ -78,17 +104,29 @@ struct SubtitleView: View {
         VStack(alignment: .leading, spacing: 2) {
             if settings.showOriginalText {
                 Text(entry.recognized)
-                    .font(.system(size: settings.fontSize))
+                    .font(.system(size: settings.safeFontSize))
                     .foregroundColor(settings.fontColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if settings.showTranslation && !entry.translated.isEmpty {
-                Text(entry.translated)
-                    .font(.system(size: settings.translatedFontSize))
-                    .foregroundColor(settings.translatedFontColor)
+            if settings.showTranslation {
+                Text(entry.translated.isEmpty ? "..." : entry.translated)
+                    .font(.system(size: settings.safeTranslatedFontSize))
+                    .foregroundColor(entry.translated.isEmpty
+                        ? settings.translatedFontColor.opacity(0.4)
+                        : settings.translatedFontColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private var translationStatusText: String? {
+        if let error = translationService.lastErrorMessage, !error.isEmpty {
+            return error
+        }
+        if let status = translationService.statusMessage, !status.isEmpty {
+            return status
+        }
+        return nil
     }
 }

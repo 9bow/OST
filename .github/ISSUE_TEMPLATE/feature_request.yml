@@ -16,6 +16,22 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected Area
+      options:
+        - Permissions / Setup
+        - Audio Capture
+        - Speech Recognition
+        - Translation
+        - Overlay Display
+        - Session History / Logs
+        - Settings
+        - Other
+    validations:
+      required: true
+
   - type: textarea
     id: solution
     attributes:

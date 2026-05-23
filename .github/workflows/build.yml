@@ -1,7 +1,10 @@
 name: Build and Release
 
 on:
+  pull_request:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -10,28 +13,95 @@ jobs:
   build:
     runs-on: macos-15
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Test
+        run: ./test.sh
 
       - name: Build
         run: ./build.sh
 
       - name: Create ZIP
         run: |
+          set -euo pipefail
           cd build
-          zip -r ../OST.zip OST.app
+          zip -r -X ../OST.zip OST.app -x '*/.DS_Store' -x '__MACOSX/*' -x '*/._*'
+
+      - name: Validate ZIP
+        run: |
+          set -euo pipefail
+          test -s OST.zip
+          shasum -a 256 OST.zip
+          unzip -t OST.zip
+          unzip -Z1 OST.zip | grep -Fxq 'OST.app/Contents/MacOS/OST'
+          ! unzip -Z1 OST.zip | grep -Eq '(^__MACOSX/|(^|/)\._|(^|/)\.DS_Store$)'
+          rm -rf build/ost-zip-check
+          unzip -q OST.zip -d build/ost-zip-check
+          test -x build/ost-zip-check/OST.app/Contents/MacOS/OST
+          codesign --verify --deep --strict build/ost-zip-check/OST.app
+          codesign -d --entitlements :- build/ost-zip-check/OST.app > build/ost-zip-check/codesign-entitlements.plist 2>/dev/null
+          plutil -lint build/ost-zip-check/codesign-entitlements.plist
+          test "$(plutil -convert json -o - build/ost-zip-check/codesign-entitlements.plist)" = "$(plutil -convert json -o - OST/Resources/OST.entitlements)"
+          plutil -lint build/ost-zip-check/OST.app/Contents/Info.plist
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' build/ost-zip-check/OST.app/Contents/Info.plist)" = "On-Screen Translator"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' build/ost-zip-check/OST.app/Contents/Info.plist)" = "com.ost.on-screen-translator"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' build/ost-zip-check/OST.app/Contents/Info.plist)" = "true"
+          /usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' build/ost-zip-check/OST.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :NSAudioCaptureUsageDescription' build/ost-zip-check/OST.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :NSSystemAudioRecordingUsageDescription' build/ost-zip-check/OST.app/Contents/Info.plist
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OST.app
+          name: OST.zip
           path: OST.zip
 
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: OST.zip
+          path: .
+
+      - name: Verify release artifact
+        run: |
+          set -euo pipefail
+          test -s OST.zip
+          sha256sum OST.zip
+          unzip -t OST.zip
+          unzip -Z1 OST.zip | grep -Fxq 'OST.app/Contents/MacOS/OST'
+          ! unzip -Z1 OST.zip | grep -Eq '(^__MACOSX/|(^|/)\._|(^|/)\.DS_Store$)'
+          rm -rf release-zip-check
+          unzip -q OST.zip -d release-zip-check
+          test -x release-zip-check/OST.app/Contents/MacOS/OST
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+
+          plist = plistlib.loads(Path("release-zip-check/OST.app/Contents/Info.plist").read_bytes())
+          assert plist.get("CFBundleDisplayName") == "On-Screen Translator"
+          assert plist.get("CFBundleIdentifier") == "com.ost.on-screen-translator"
+          assert plist.get("LSUIElement") is True
+          for key in (
+              "NSSpeechRecognitionUsageDescription",
+              "NSAudioCaptureUsageDescription",
+              "NSSystemAudioRecordingUsageDescription",
+          ):
+              assert plist.get(key), f"Missing or empty {key}"
+          PY
+
       - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: OST.zip
