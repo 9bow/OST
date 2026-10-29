@@ -88,6 +88,11 @@ final class PreferencesStore: ObservableObject {
         set { snapshot.overlayLayout = newValue }
     }
 
+    var subtitleDisplayMode: SubtitleDisplayMode {
+        get { snapshot.subtitleDisplayMode }
+        set { snapshot.subtitleDisplayMode = newValue }
+    }
+
     var overlayLocked: Bool {
         get { snapshot.overlayLocked }
         set { snapshot.overlayLocked = newValue }

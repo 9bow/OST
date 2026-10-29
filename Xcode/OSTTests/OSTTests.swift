@@ -47,6 +47,54 @@ final class OSTTests: XCTestCase {
     }
 
     @MainActor
+    func testSubtitleDisplayModePersists() {
+        let suiteName = "OSTTests.subtitle-display.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = PreferencesStore(userDefaults: defaults)
+        XCTAssertEqual(preferences.subtitleDisplayMode, .both)
+
+        for mode in SubtitleDisplayMode.allCases {
+            preferences.subtitleDisplayMode = mode
+            XCTAssertEqual(PreferencesStore(userDefaults: defaults).subtitleDisplayMode, mode)
+        }
+    }
+
+    @MainActor
+    func testSubtitleDisplayModeUpdatesVisiblePanels() {
+        let suiteName = "OSTTests.subtitle-panels.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = PreferencesStore(userDefaults: defaults)
+        let existingWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let coordinator = OverlayCoordinator(
+            state: OverlayState(),
+            preferences: preferences,
+            translationPackCoordinator: TranslationPackCoordinator()
+        )
+        defer { coordinator.hide() }
+
+        for layout in OverlayLayout.allCases {
+            preferences.overlayLayout = layout
+            for mode in SubtitleDisplayMode.allCases + [.both] {
+                preferences.subtitleDisplayMode = mode
+                coordinator.applyPreferences()
+                let visibleTitles = Set(NSApp.windows.filter {
+                    !existingWindows.contains(ObjectIdentifier($0)) && $0.isVisible
+                }.map(\.title))
+                var expected: Set<String> = []
+                if layout == .combined {
+                    expected.insert("OST Subtitles")
+                } else {
+                    if mode != .translationOnly { expected.insert("OST Transcript") }
+                    if mode != .sourceOnly { expected.insert("OST Translation") }
+                }
+                XCTAssertEqual(visibleTitles, expected, "\(layout.rawValue), \(mode.rawValue)")
+            }
+        }
+    }
+
+    @MainActor
     func testSavedAutomaticInputIsRepairedWhenAppleSpeechIsSelected() throws {
         let suiteName = "OSTTests.apple-speech-input.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -104,13 +152,16 @@ final class OSTTests: XCTestCase {
         for layout in [OverlayLayout.combined, .split] {
             preferences.overlayLayout = layout
             preferences.overlayLineCount = layout == .combined ? 3 : 10
-            let renderer = ImageRenderer(content:
-                OverlaySettingsPreview(preferences: preferences)
-                    .frame(width: 580)
-                    .padding(16)
-            )
-            renderer.scale = 1
-            XCTAssertNotNil(renderer.nsImage, "Could not render \(layout.rawValue) preview")
+            for mode in SubtitleDisplayMode.allCases {
+                preferences.subtitleDisplayMode = mode
+                let renderer = ImageRenderer(content:
+                    OverlaySettingsPreview(preferences: preferences)
+                        .frame(width: 580)
+                        .padding(16)
+                )
+                renderer.scale = 1
+                XCTAssertNotNil(renderer.nsImage, "Could not render \(layout.rawValue), \(mode.rawValue) preview")
+            }
         }
     }
 

@@ -197,6 +197,7 @@ private actor LimitedTranscriptionProvider: TranscriptionProvider {
         from: Data("{}".utf8)
     )
     #expect(decoded.overlayLineCount == 3)
+    #expect(decoded.subtitleDisplayMode == .both)
     #expect(decoded.overlayLocked == true)
     #expect(decoded.endpointSilenceSeconds == 0.8)
     #expect(decoded.subtitleAlignment == .leading)
@@ -207,6 +208,37 @@ private actor LimitedTranscriptionProvider: TranscriptionProvider {
     #expect(decoded.sessionLoggingEnabled == false)
     #expect(decoded.sessionLogDirectoryBookmark == nil)
     #expect(decoded.sessionLogDirectoryPath == nil)
+}
+
+@Test(arguments: OverlayLayout.allCases, SubtitleDisplayMode.allCases)
+func subtitleDisplayModeRoundTrips(layout: OverlayLayout, mode: SubtitleDisplayMode) throws {
+    let original = PreferencesSnapshot(overlayLayout: layout, subtitleDisplayMode: mode)
+    let decoded = try JSONDecoder().decode(
+        PreferencesSnapshot.self,
+        from: JSONEncoder().encode(original)
+    )
+    #expect(decoded == original)
+}
+
+@Test func singleSubtitleAreaUsesOnlyItsOwnHeight() {
+    let sourceOnly = OverlaySizing.combinedSize(
+        lineCount: 3,
+        sourceFontSize: 20,
+        translationFontSize: 72,
+        previewFontSize: 72,
+        displayMode: .sourceOnly,
+        maximumHeight: 900
+    )
+    let translationOnly = OverlaySizing.combinedSize(
+        lineCount: 3,
+        sourceFontSize: 72,
+        translationFontSize: 28,
+        previewFontSize: 40,
+        displayMode: .translationOnly,
+        maximumHeight: 900
+    )
+    #expect(sourceOnly.height == 153)
+    #expect(translationOnly.height == 233)
 }
 
 @Test func appDisplayLanguageSupportsFourLocalesAndDefaultsToEnglish() {

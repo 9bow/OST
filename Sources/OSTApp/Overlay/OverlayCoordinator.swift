@@ -29,6 +29,8 @@ final class OverlayCoordinator {
         let sourceFontSize: Double
         let translationFontSize: Double
         let previewFontSize: Double
+        // Legacy sizing signatures omit this value when both tracks are visible.
+        let subtitleDisplayMode: SubtitleDisplayMode?
     }
 
     private let state: OverlayState
@@ -52,7 +54,8 @@ final class OverlayCoordinator {
             lineCount: preferences.overlayLineCount,
             sourceFontSize: preferences.sourceFontSize,
             translationFontSize: preferences.translationFontSize,
-            previewFontSize: preferences.previewFontSize
+            previewFontSize: preferences.previewFontSize,
+            subtitleDisplayMode: preferences.subtitleDisplayMode == .both ? nil : preferences.subtitleDisplayMode
         )
         for kind in [OverlayPanelKind.combined, .source, .translation] {
             if let data = UserDefaults.standard.data(forKey: sizingDefaultsKey(for: kind)),
@@ -93,7 +96,8 @@ final class OverlayCoordinator {
             lineCount: preferences.overlayLineCount,
             sourceFontSize: preferences.sourceFontSize,
             translationFontSize: preferences.translationFontSize,
-            previewFontSize: preferences.previewFontSize
+            previewFontSize: preferences.previewFontSize,
+            subtitleDisplayMode: preferences.subtitleDisplayMode == .both ? nil : preferences.subtitleDisplayMode
         )
         sizingSignature = newSizingSignature
         switch preferences.overlayLayout {
@@ -108,18 +112,26 @@ final class OverlayCoordinator {
             panel(for: .combined).orderFrontRegardless()
         case .split:
             panel(for: .combined).orderOut(nil)
-            configure(
-                panel(for: .source),
-                kind: .source,
-                name: "OSTSourceOverlay"
-            )
-            configure(
-                panel(for: .translation),
-                kind: .translation,
-                name: "OSTTranslationOverlay"
-            )
-            panel(for: .source).orderFrontRegardless()
-            panel(for: .translation).orderFrontRegardless()
+            if preferences.subtitleDisplayMode.showsSource {
+                configure(
+                    panel(for: .source),
+                    kind: .source,
+                    name: "OSTSourceOverlay"
+                )
+                panel(for: .source).orderFrontRegardless()
+            } else {
+                panels[.source]?.orderOut(nil)
+            }
+            if preferences.subtitleDisplayMode.showsTranslation {
+                configure(
+                    panel(for: .translation),
+                    kind: .translation,
+                    name: "OSTTranslationOverlay"
+                )
+                panel(for: .translation).orderFrontRegardless()
+            } else {
+                panels[.translation]?.orderOut(nil)
+            }
         }
     }
 
@@ -250,6 +262,7 @@ final class OverlayCoordinator {
                 sourceFontSize: preferences.sourceFontSize,
                 translationFontSize: preferences.translationFontSize,
                 previewFontSize: preferences.previewFontSize,
+                displayMode: preferences.subtitleDisplayMode,
                 maximumHeight: maximumHeight
             )
         case .source:
@@ -309,7 +322,11 @@ private struct TranslationTaskOverlayRoot: View {
 
     private var hostedConfiguration: TranslationSession.Configuration? {
         switch (preferences.overlayLayout, kind) {
-        case (.combined, .combined), (.split, .source):
+        case (.combined, .combined):
+            translationPackCoordinator.configuration
+        case (.split, .source) where preferences.subtitleDisplayMode.showsSource:
+            translationPackCoordinator.configuration
+        case (.split, .translation) where !preferences.subtitleDisplayMode.showsSource:
             translationPackCoordinator.configuration
         default:
             nil

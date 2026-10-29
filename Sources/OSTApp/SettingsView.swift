@@ -347,6 +347,11 @@ struct SettingsView: View {
     private var overlayTab: some View {
         Form {
             Section(t("Layout")) {
+                Picker(t("Displayed subtitles"), selection: subtitleDisplayModeBinding) {
+                    Text(t("Transcript and translation")).tag(SubtitleDisplayMode.both)
+                    Text(t("Transcript only")).tag(SubtitleDisplayMode.sourceOnly)
+                    Text(t("Translation only")).tag(SubtitleDisplayMode.translationOnly)
+                }
                 Picker(t("Window arrangement"), selection: overlayLayoutBinding) {
                     Text(t("Combined window")).tag(OverlayLayout.combined)
                     Text(t("Separate transcript and translation")).tag(OverlayLayout.split)
@@ -636,6 +641,9 @@ struct SettingsView: View {
     }
     private var overlayLayoutBinding: Binding<OverlayLayout> {
         Binding(get: { model.preferences.overlayLayout }, set: { model.preferences.overlayLayout = $0 })
+    }
+    private var subtitleDisplayModeBinding: Binding<SubtitleDisplayMode> {
+        Binding(get: { model.preferences.subtitleDisplayMode }, set: { model.preferences.subtitleDisplayMode = $0 })
     }
     private var subtitleAlignmentBinding: Binding<SubtitleAlignment> {
         Binding(get: { model.preferences.subtitleAlignment }, set: { model.preferences.subtitleAlignment = $0 })

@@ -36,6 +36,15 @@ public enum OverlayLayout: String, Codable, CaseIterable, Sendable {
     case split
 }
 
+public enum SubtitleDisplayMode: String, Codable, CaseIterable, Sendable {
+    case both
+    case sourceOnly
+    case translationOnly
+
+    public var showsSource: Bool { self != .translationOnly }
+    public var showsTranslation: Bool { self != .sourceOnly }
+}
+
 public enum SubtitleAlignment: String, Codable, CaseIterable, Sendable {
     case leading
     case center
@@ -68,6 +77,7 @@ public struct PreferencesSnapshot: Codable, Sendable, Equatable {
     public var selectedTranslationModelID: String
     public var mlxTranslationPrompt: String
     public var overlayLayout: OverlayLayout
+    public var subtitleDisplayMode: SubtitleDisplayMode
     public var overlayLocked: Bool
     public var sourceFontSize: Double
     public var translationFontSize: Double
@@ -95,6 +105,7 @@ public struct PreferencesSnapshot: Codable, Sendable, Equatable {
         selectedTranslationModelID: String = "mlx-community/Qwen3-0.6B-4bit",
         mlxTranslationPrompt: String = MLXPromptDefaults.translation,
         overlayLayout: OverlayLayout = .combined,
+        subtitleDisplayMode: SubtitleDisplayMode = .both,
         overlayLocked: Bool = false,
         sourceFontSize: Double = 20,
         translationFontSize: Double = 28,
@@ -121,6 +132,7 @@ public struct PreferencesSnapshot: Codable, Sendable, Equatable {
         self.selectedTranslationModelID = selectedTranslationModelID
         self.mlxTranslationPrompt = String(mlxTranslationPrompt.prefix(4_000))
         self.overlayLayout = overlayLayout
+        self.subtitleDisplayMode = subtitleDisplayMode
         self.overlayLocked = overlayLocked
         self.sourceFontSize = min(max(sourceFontSize, 12), 72)
         self.translationFontSize = min(max(translationFontSize, 12), 72)
@@ -149,6 +161,7 @@ public struct PreferencesSnapshot: Codable, Sendable, Equatable {
         case selectedTranslationModelID
         case mlxTranslationPrompt
         case overlayLayout
+        case subtitleDisplayMode
         case overlayLocked
         case sourceFontSize
         case translationFontSize
@@ -181,6 +194,7 @@ public struct PreferencesSnapshot: Codable, Sendable, Equatable {
             selectedTranslationModelID: try values.decodeIfPresent(String.self, forKey: .selectedTranslationModelID) ?? "mlx-community/Qwen3-0.6B-4bit",
             mlxTranslationPrompt: try values.decodeIfPresent(String.self, forKey: .mlxTranslationPrompt) ?? MLXPromptDefaults.translation,
             overlayLayout: try values.decodeIfPresent(OverlayLayout.self, forKey: .overlayLayout) ?? .combined,
+            subtitleDisplayMode: try values.decodeIfPresent(SubtitleDisplayMode.self, forKey: .subtitleDisplayMode) ?? .both,
             overlayLocked: try values.decodeIfPresent(Bool.self, forKey: .overlayLocked) ?? true,
             sourceFontSize: try values.decodeIfPresent(Double.self, forKey: .sourceFontSize) ?? 20,
             translationFontSize: translationFontSize,
@@ -209,8 +223,22 @@ public enum OverlaySizing {
         sourceFontSize: Double,
         translationFontSize: Double,
         previewFontSize: Double? = nil,
+        displayMode: SubtitleDisplayMode = .both,
         maximumHeight: Double
     ) -> CGSize {
+        switch displayMode {
+        case .sourceOnly:
+            return sourceSize(lineCount: lineCount, fontSize: sourceFontSize, maximumHeight: maximumHeight)
+        case .translationOnly:
+            return translationSize(
+                lineCount: lineCount,
+                fontSize: translationFontSize,
+                previewFontSize: previewFontSize,
+                maximumHeight: maximumHeight
+            )
+        case .both:
+            break
+        }
         let confirmedLines = Double(min(max(lineCount, 2), 10))
         let previewLines = Double(previewLineCount)
         let requestedHeight = sourceFontSize * 1.25 * (confirmedLines + previewLines)

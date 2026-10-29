@@ -66,9 +66,15 @@ struct OverlayContentView: View {
         switch kind {
         case .combined:
             VStack(alignment: preferences.subtitleAlignment.horizontalAlignment, spacing: 8) {
-                sourceText
-                Divider().overlay(.white.opacity(0.12))
-                translationText
+                if preferences.subtitleDisplayMode.showsSource {
+                    sourceText
+                }
+                if preferences.subtitleDisplayMode == .both {
+                    Divider().overlay(.white.opacity(0.12))
+                }
+                if preferences.subtitleDisplayMode.showsTranslation {
+                    translationText
+                }
             }
         case .source:
             sourceText

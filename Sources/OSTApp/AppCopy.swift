@@ -51,6 +51,7 @@ enum AppCopy {
     }
 
     private static let chinese: [String: String] = [
+        "Displayed subtitles": "显示字幕", "Transcript and translation": "原文和翻译", "Transcript only": "仅原文", "Translation only": "仅翻译",
         "General": "通用", "Models": "模型", "Appearance": "外观", "Overlay": "悬浮字幕", "Privacy": "隐私",
         "Close": "关闭", "Cancel": "取消", "Start": "开始", "Stop": "停止", "Quit": "退出", "Settings…": "设置…",
         "App language": "应用语言", "English": "英语", "Chinese": "中文", "Chinese (Simplified)": "中文（简体）", "Chinese (Traditional)": "中文（繁体）", "Japanese": "日语", "Korean": "韩语",
@@ -81,6 +82,7 @@ enum AppCopy {
     ]
 
     private static let japanese: [String: String] = [
+        "Displayed subtitles": "表示する字幕", "Transcript and translation": "原文と翻訳", "Transcript only": "原文のみ", "Translation only": "翻訳のみ",
         "General": "一般", "Models": "モデル", "Appearance": "外観", "Overlay": "オーバーレイ", "Privacy": "プライバシー",
         "Close": "閉じる", "Cancel": "キャンセル", "Start": "開始", "Stop": "停止", "Quit": "終了", "Settings…": "設定…",
         "App language": "表示言語", "English": "英語", "Chinese": "中国語", "Chinese (Simplified)": "中国語（簡体字）", "Chinese (Traditional)": "中国語（繁体字）", "Japanese": "日本語", "Korean": "韓国語",
@@ -111,6 +113,7 @@ enum AppCopy {
     ]
 
     private static let korean: [String: String] = [
+        "Displayed subtitles": "표시할 자막", "Transcript and translation": "원문과 번역문", "Transcript only": "원문만", "Translation only": "번역문만",
         "General": "일반", "Models": "모델", "Appearance": "외형", "Overlay": "오버레이", "Privacy": "개인정보",
         "Close": "닫기", "Cancel": "취소", "Start": "시작", "Stop": "중지", "Quit": "종료", "Settings…": "설정…",
         "App language": "App 표시 언어", "English": "영어", "Chinese": "중국어", "Chinese (Simplified)": "중국어(간체)", "Chinese (Traditional)": "중국어(번체)", "Japanese": "일본어", "Korean": "한국어",

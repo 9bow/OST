@@ -14,17 +14,21 @@ struct OverlaySettingsPreview: View {
             if preferences.overlayLayout == .combined {
                 panel(kind: .combined, maximumPreviewHeight: 320)
             } else {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(t("Transcript window"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    panel(kind: .source, maximumPreviewHeight: 180)
+                if preferences.subtitleDisplayMode.showsSource {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(t("Transcript window"))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        panel(kind: .source, maximumPreviewHeight: 180)
+                    }
                 }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(t("Translation window"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    panel(kind: .translation, maximumPreviewHeight: 180)
+                if preferences.subtitleDisplayMode.showsTranslation {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(t("Translation window"))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        panel(kind: .translation, maximumPreviewHeight: 180)
+                    }
                 }
             }
         }
@@ -73,6 +77,7 @@ struct OverlaySettingsPreview: View {
                 sourceFontSize: preferences.sourceFontSize,
                 translationFontSize: preferences.translationFontSize,
                 previewFontSize: preferences.previewFontSize,
+                displayMode: preferences.subtitleDisplayMode,
                 maximumHeight: 2_000
             )
         case .source:
