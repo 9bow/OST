@@ -35,6 +35,9 @@ enum AppCopy {
         switch failure {
         case .permissionDenied: return text("System audio permission was denied.", language: language)
         case .permissionRevoked: return text("System audio permission was revoked.", language: language)
+        case .microphonePermissionDenied: return text("Microphone permission was denied or revoked.", language: language)
+        case .microphoneUnavailable: return text("No microphone is available.", language: language)
+        case .microphoneCaptureFailed: return text("Microphone capture failed.", language: language)
         case .outputDeviceUnavailable: return text("No audio output device is available.", language: language)
         case .unsupportedLanguage(let value):
             return text("This language is not supported:", language: language) + " " + languageName(value, displayLanguage: language)
@@ -51,6 +54,25 @@ enum AppCopy {
     }
 
     private static let chinese: [String: String] = [
+        "Microphone": "麦克风",
+        "Microphone input": "麦克风输入",
+        "Off": "关闭",
+        "Transcribe only": "仅转写",
+        "Transcribe and translate": "转写并翻译",
+        "System audio stays enabled. Microphone input uses the selected input language and providers. Restart capture after changes.": "系统音频保持启用。麦克风输入使用所选输入语言和提供方。修改后请重新开始捕获。",
+        "Capturing both inputs uses more memory and processing time. Use headphones to avoid transcribing speaker audio twice.": "同时捕获两种输入会占用更多内存和处理时间。请使用耳机，避免重复转写扬声器的声音。",
+        "Microphone subtitles": "麦克风字幕",
+        "Microphone transcripts, translations, and live previews use this color and a microphone symbol.": "麦克风转写、翻译和实时预览使用此颜色，并带有麦克风图标。",
+        "Microphone subtitles appear here.": "麦克风字幕将显示在这里。",
+        "Open Microphone Permission Settings": "打开麦克风权限设置",
+        "Microphone permission was denied or revoked.": "麦克风权限被拒绝或撤销。",
+        "No microphone is available.": "没有可用的麦克风。",
+        "Microphone capture failed.": "麦克风捕获失败。",
+        "Keyword boosting": "关键词优先识别",
+        "Preferred transcription terms": "优先识别的转写术语",
+        "Enter one short term per line, such as PyTorch or a product name. The first 100 unique terms are used.": "每行输入一个简短术语，例如 PyTorch 或产品名称。仅使用前 100 个不重复的术语。",
+        "Qwen3 ASR uses these hints for confirmed transcripts, not live previews. Recognition is not guaranteed. Restart capture after changes.": "Qwen3 ASR 在生成确认的转写结果时参考这些术语，实时预览不受影响。无法保证识别结果。修改后请重新开始捕获。",
+        "Apple Speech does not use these terms. Select Qwen3 ASR to enable keyword boosting.": "Apple Speech 不使用这些术语。请选择 Qwen3 ASR 以启用关键词优先识别。",
         "Displayed subtitles": "显示字幕", "Transcript and translation": "原文和翻译", "Transcript only": "仅原文", "Translation only": "仅翻译",
         "General": "通用", "Models": "模型", "Appearance": "外观", "Overlay": "悬浮字幕", "Privacy": "隐私",
         "Close": "关闭", "Cancel": "取消", "Start": "开始", "Stop": "停止", "Quit": "退出", "Settings…": "设置…",
@@ -82,6 +104,25 @@ enum AppCopy {
     ]
 
     private static let japanese: [String: String] = [
+        "Microphone": "マイク",
+        "Microphone input": "マイク入力",
+        "Off": "オフ",
+        "Transcribe only": "文字起こしのみ",
+        "Transcribe and translate": "文字起こしと翻訳",
+        "System audio stays enabled. Microphone input uses the selected input language and providers. Restart capture after changes.": "システム音声は有効のままです。マイク入力には選択した入力言語とプロバイダを使用します。変更後はキャプチャを再開してください。",
+        "Capturing both inputs uses more memory and processing time. Use headphones to avoid transcribing speaker audio twice.": "両方の入力をキャプチャすると、メモリ使用量と処理時間が増えます。スピーカーの音声を重複して文字起こししないよう、ヘッドフォンを使用してください。",
+        "Microphone subtitles": "マイク字幕",
+        "Microphone transcripts, translations, and live previews use this color and a microphone symbol.": "マイクの文字起こし、翻訳、リアルタイムプレビューには、この色とマイクのアイコンを使用します。",
+        "Microphone subtitles appear here.": "マイクの字幕がここに表示されます。",
+        "Open Microphone Permission Settings": "マイクの権限設定を開く",
+        "Microphone permission was denied or revoked.": "マイクの権限が拒否または取り消されました。",
+        "No microphone is available.": "利用可能なマイクがありません。",
+        "Microphone capture failed.": "マイクのキャプチャに失敗しました。",
+        "Keyword boosting": "キーワード優先認識",
+        "Preferred transcription terms": "優先して認識する用語",
+        "Enter one short term per line, such as PyTorch or a product name. The first 100 unique terms are used.": "PyTorch や製品名など、短い用語を1行に1つ入力してください。重複を除いた最初の100語を使用します。",
+        "Qwen3 ASR uses these hints for confirmed transcripts, not live previews. Recognition is not guaranteed. Restart capture after changes.": "Qwen3 ASR は確定した文字起こしにこれらの用語を参考にします。リアルタイムのプレビューには反映されません。認識結果は保証されません。変更後はキャプチャを再開してください。",
+        "Apple Speech does not use these terms. Select Qwen3 ASR to enable keyword boosting.": "Apple Speech ではこれらの用語を使用しません。キーワード優先認識を有効にするには Qwen3 ASR を選択してください。",
         "Displayed subtitles": "表示する字幕", "Transcript and translation": "原文と翻訳", "Transcript only": "原文のみ", "Translation only": "翻訳のみ",
         "General": "一般", "Models": "モデル", "Appearance": "外観", "Overlay": "オーバーレイ", "Privacy": "プライバシー",
         "Close": "閉じる", "Cancel": "キャンセル", "Start": "開始", "Stop": "停止", "Quit": "終了", "Settings…": "設定…",
@@ -113,6 +154,25 @@ enum AppCopy {
     ]
 
     private static let korean: [String: String] = [
+        "Microphone": "마이크",
+        "Microphone input": "마이크 입력",
+        "Off": "꺼짐",
+        "Transcribe only": "받아쓰기만",
+        "Transcribe and translate": "받아쓰기 및 번역",
+        "System audio stays enabled. Microphone input uses the selected input language and providers. Restart capture after changes.": "시스템 오디오는 계속 처리합니다. 마이크 입력에도 선택한 입력 언어와 처리 엔진을 사용합니다. 변경 후 캡처를 재시작하세요.",
+        "Capturing both inputs uses more memory and processing time. Use headphones to avoid transcribing speaker audio twice.": "두 입력을 함께 처리하면 메모리와 처리 시간이 늘어납니다. 스피커 소리가 중복으로 받아써지지 않도록 헤드폰을 사용하세요.",
+        "Microphone subtitles": "마이크 자막",
+        "Microphone transcripts, translations, and live previews use this color and a microphone symbol.": "마이크 받아쓰기, 번역, 실시간 미리보기에 이 색상과 마이크 아이콘을 사용합니다.",
+        "Microphone subtitles appear here.": "마이크 자막이 여기에 표시됩니다.",
+        "Open Microphone Permission Settings": "마이크 권한 설정 열기",
+        "Microphone permission was denied or revoked.": "마이크 권한이 거부되었거나 철회되었습니다.",
+        "No microphone is available.": "사용 가능한 마이크가 없습니다.",
+        "Microphone capture failed.": "마이크 캡처에 실패했습니다.",
+        "Keyword boosting": "주요 용어 우선 인식",
+        "Preferred transcription terms": "우선 인식할 받아쓰기 용어",
+        "Enter one short term per line, such as PyTorch or a product name. The first 100 unique terms are used.": "PyTorch나 제품명처럼 짧은 용어를 한 줄에 하나씩 입력하세요. 중복을 제외한 처음 100개 용어를 사용합니다.",
+        "Qwen3 ASR uses these hints for confirmed transcripts, not live previews. Recognition is not guaranteed. Restart capture after changes.": "Qwen3 ASR이 확정 받아쓰기에 용어를 참고합니다. 실시간 미리보기에는 적용되지 않으며, 인식 결과를 보장하지는 않습니다. 변경 후 캡처를 다시 시작하세요.",
+        "Apple Speech does not use these terms. Select Qwen3 ASR to enable keyword boosting.": "Apple Speech에는 이 용어들이 적용되지 않습니다. 주요 용어 우선 인식을 사용하려면 Qwen3 ASR을 선택하세요.",
         "Displayed subtitles": "표시할 자막", "Transcript and translation": "원문과 번역문", "Transcript only": "원문만", "Translation only": "번역문만",
         "General": "일반", "Models": "모델", "Appearance": "외형", "Overlay": "오버레이", "Privacy": "개인정보",
         "Close": "닫기", "Cancel": "취소", "Start": "시작", "Stop": "중지", "Quit": "종료", "Settings…": "설정…",

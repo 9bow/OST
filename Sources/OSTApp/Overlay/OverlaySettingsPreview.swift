@@ -37,6 +37,9 @@ struct OverlaySettingsPreview: View {
         .onChange(of: preferences.appDisplayLanguage) { _, _ in
             updateSampleSegments()
         }
+        .onChange(of: preferences.microphoneMode) { _, _ in
+            updateSampleSegments()
+        }
     }
 
     private func panel(
@@ -78,12 +81,14 @@ struct OverlaySettingsPreview: View {
                 translationFontSize: preferences.translationFontSize,
                 previewFontSize: preferences.previewFontSize,
                 displayMode: preferences.subtitleDisplayMode,
+                microphoneMode: state.microphoneMode ?? preferences.microphoneMode,
                 maximumHeight: 2_000
             )
         case .source:
             return OverlaySizing.sourceSize(
                 lineCount: preferences.overlayLineCount,
                 fontSize: preferences.sourceFontSize,
+                microphoneMode: state.microphoneMode ?? preferences.microphoneMode,
                 maximumHeight: 2_000
             )
         case .translation:
@@ -91,6 +96,7 @@ struct OverlaySettingsPreview: View {
                 lineCount: preferences.overlayLineCount,
                 fontSize: preferences.translationFontSize,
                 previewFontSize: preferences.previewFontSize,
+                microphoneMode: state.microphoneMode ?? preferences.microphoneMode,
                 maximumHeight: 2_000
             )
         }
@@ -103,6 +109,7 @@ struct OverlaySettingsPreview: View {
         case .automatic: language = .english
         }
         state.isListening = true
+        state.microphoneMode = preferences.microphoneMode
         state.segments = [
             TranscriptSegment(
                 id: UUID(uuidString: "0F3B783B-240B-4C32-909D-677560703DBB")!,
@@ -122,6 +129,29 @@ struct OverlaySettingsPreview: View {
                 isFinal: false
             ),
         ]
+        if preferences.microphoneMode.isEnabled {
+            state.segments.insert(TranscriptSegment(
+                id: UUID(uuidString: "A2D8F4D5-4199-4C55-B9CC-8B0FBBA74D27")!,
+                startTime: .seconds(1),
+                endTime: .seconds(2),
+                language: language,
+                sourceText: t("Microphone subtitles appear here."),
+                translatedText: preferences.microphoneMode == .transcriptionAndTranslation
+                    ? t("Microphone subtitles appear here.") : nil,
+                isFinal: true,
+                audioSource: .microphone
+            ), at: 1)
+            state.segments.append(TranscriptSegment(
+                id: UUID(uuidString: "DC0E04B8-165F-4186-8370-7E0B68CC09EC")!,
+                startTime: .seconds(2),
+                language: language,
+                sourceText: t("Microphone subtitles appear here."),
+                translatedText: preferences.microphoneMode == .transcriptionAndTranslation
+                    ? t("Microphone subtitles appear here.") : nil,
+                isFinal: false,
+                audioSource: .microphone
+            ))
+        }
     }
 
     private func t(_ english: String) -> String {

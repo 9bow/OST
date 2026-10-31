@@ -38,9 +38,9 @@ Internet access is used only when the user chooses to download an MLX model. The
 - macOS 26.0 or later
 - Apple Silicon
 
-## Install 0.2.3
+## Install 0.3.0
 
-Download `OST-0.2.3-macos-arm64.zip` from the [v0.2.3 release](https://github.com/9bow/OST/releases/tag/v0.2.3), extract it, and move `OST.app` to Applications.
+Download `OST-0.3.0-macos-arm64.zip` from the [v0.3.0 release](https://github.com/9bow/OST/releases/tag/v0.3.0), extract it, and move `OST.app` to Applications.
 
 The current binary is ad-hoc signed because a Developer ID certificate was not available in the release environment. If macOS quarantine reports that the app cannot be verified or is damaged, remove the quarantine attribute after confirming that you downloaded it from this repository:
 
@@ -51,7 +51,7 @@ xattr -dr com.apple.quarantine /Applications/OST.app
 The release ZIP SHA-256 is published by the release workflow and can be compared with:
 
 ```bash
-shasum -a 256 OST-0.2.3-macos-arm64.zip
+shasum -a 256 OST-0.3.0-macos-arm64.zip
 ```
 
 ## Start transcribing
@@ -60,6 +60,22 @@ shasum -a 256 OST-0.2.3-macos-arm64.zip
 2. Select the OST captions icon in the menu bar.
 3. Choose the input and target languages, then choose **Start**.
 4. Use **Settings > Overlay** to unlock, move, resize, or change the number of confirmed lines.
+
+## Microphone input
+
+In Settings > General > Microphone, select Off, Transcribe only, or Transcribe and translate. Restart capture after a change.
+
+System audio stays enabled. Both inputs use the selected input language and providers. macOS requests microphone permission only when you enable microphone input.
+
+In Settings > Appearance > Microphone subtitles, choose a separate text color. Microphone transcripts, translations, and previews use this color and a microphone symbol. Each enabled input has its own two-line preview. Saved microphone text uses the `[Microphone]` prefix.
+
+Capturing both inputs uses more memory and processing time. Use headphones to avoid transcribing speaker audio twice.
+
+## Keyword boosting
+
+Keyword boosting gives Qwen3 ASR preferred spellings for spoken terms. In Settings > Models, select Qwen3 ASR as the transcription provider. Under Keyword boosting, enter one short term per line. Restart capture after changes. Clear the list to disable the hints.
+
+OST stores up to 4,000 characters locally and uses the first 100 unique terms. Qwen3 ASR uses these hints for confirmed transcripts. Live previews and Apple Speech do not use them. Hints do not guarantee recognition or force text replacements.
 
 ## Optional session files
 

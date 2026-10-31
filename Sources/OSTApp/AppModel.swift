@@ -23,8 +23,9 @@ final class AppModel: ObservableObject {
     private let stateMachine = CaptureStateMachine()
     private let recovery = CaptureRecoveryCoordinator()
     private let segmentStore = SegmentStore()
-    private let translationScheduler = TranslationScheduler()
+    private let translationScheduler: TranslationScheduler
     private let audioCapture = CoreAudioTapCapture()
+    private let microphoneCapture = MicrophoneCapture()
     private let appleSpeech = AppleSpeechProvider()
     private let appleTranslation = AppleTranslationProvider()
     private let qwenASR = Qwen3ASRAdapter()
@@ -34,22 +35,28 @@ final class AppModel: ObservableObject {
     private let sessionLogWriter = SessionLogWriter()
 
     private var transcriptionTask: Task<Void, Never>?
+    private var microphoneTranscriptionTask: Task<Void, Never>?
     private var translationUpdatesTask: Task<Void, Never>?
     private var powerTask: Task<Void, Never>?
     private var captureEventsTask: Task<Void, Never>?
+    private var microphoneFailuresTask: Task<Void, Never>?
     private var terminationObserver: NSObjectProtocol?
     private var activeTranscriptionProvider: (any TranscriptionProvider)?
+    private var microphoneTranscriptionProvider: (any TranscriptionProvider)?
     private var mlxTranslationReady = false
     private var memoryPressureTranslationFallbackActive = false
     private var activated = false
     private var cancellables: Set<AnyCancellable> = []
     private var activeSessionLogDirectory: URL?
 
-    init() {
-        let preferences = PreferencesStore()
+    init(
+        preferences: PreferencesStore = PreferencesStore(),
+        translationScheduler: TranslationScheduler = TranslationScheduler()
+    ) {
         let overlayState = OverlayState()
         let translationPackCoordinator = TranslationPackCoordinator()
         self.preferences = preferences
+        self.translationScheduler = translationScheduler
         self.overlayState = overlayState
         modelDownloader = ModelDownloaderClient()
         self.translationPackCoordinator = translationPackCoordinator
@@ -98,6 +105,7 @@ final class AppModel: ObservableObject {
         startTranslationUpdates()
         startPowerMonitoring()
         startCaptureEventMonitoring()
+        startMicrophoneFailureMonitoring()
         terminationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
@@ -120,6 +128,11 @@ final class AppModel: ObservableObject {
             overlayState.clear()
 
             try await transition(to: .requestingPermission)
+            let microphoneMode = preferences.microphoneMode
+            overlayState.microphoneMode = microphoneMode
+            overlayCoordinator.applyPreferences()
+            let microphoneAudio = microphoneMode.isEnabled
+                ? try await microphoneCapture.start() : nil
             let audio = try await audioCapture.start()
             overlayState.isListening = true
 
@@ -130,23 +143,25 @@ final class AppModel: ObservableObject {
             )
             await startSessionLoggingIfNeeded()
             try await transition(to: .preparingModels)
-            try await provider.prepare(configuration: transcriptionConfiguration)
             activeTranscriptionProvider = provider
+            try await provider.prepare(configuration: transcriptionConfiguration)
+            if microphoneAudio != nil {
+                let microphoneProvider: any TranscriptionProvider = await provider.id == .appleSpeech
+                    ? AppleSpeechProvider() : Qwen3ASRAdapter()
+                microphoneTranscriptionProvider = microphoneProvider
+                try await microphoneProvider.prepare(configuration: transcriptionConfiguration)
+            }
             try await prepareSelectedMLXTranslationIfNeeded()
             try await transition(to: .running)
             overlayState.statusText = captureStatusText
 
-            transcriptionTask = Task { [weak self] in
-                guard let self else { return }
-                do {
-                    let events = await provider.transcribe(audio)
-                    for try await event in events {
-                        guard !Task.isCancelled else { break }
-                        await self.handleTranscript(event)
-                    }
-                } catch {
-                    await self.fail(Self.captureFailure(from: error))
-                }
+            transcriptionTask = consumeTranscripts(provider: provider, audio: audio, source: .systemAudio)
+            if let microphoneAudio, let microphoneTranscriptionProvider {
+                microphoneTranscriptionTask = consumeTranscripts(
+                    provider: microphoneTranscriptionProvider,
+                    audio: microphoneAudio,
+                    source: .microphone
+                )
             }
         } catch {
             let failure = Self.captureFailure(from: error)
@@ -165,15 +180,23 @@ final class AppModel: ObservableObject {
             captureState = .stopping
         }
         let finalizingTranscriptionTask = transcriptionTask
+        let finalizingMicrophoneTask = microphoneTranscriptionTask
         await activeTranscriptionProvider?.stop()
+        await microphoneTranscriptionProvider?.stop()
         await finalizingTranscriptionTask?.value
+        await finalizingMicrophoneTask?.value
         transcriptionTask = nil
+        microphoneTranscriptionTask = nil
         activeTranscriptionProvider = nil
+        microphoneTranscriptionProvider = nil
         await translationScheduler.cancelAll()
         await appleTranslation.cancelAll()
         await qwenTranslation.cancelAll()
         await qwenTranslation.unload()
         await audioCapture.stop()
+        await microphoneCapture.stop()
+        overlayState.microphoneMode = nil
+        overlayCoordinator.applyPreferences()
         await stopSessionLogging()
         mlxTranslationReady = false
         memoryPressureTranslationFallbackActive = false
@@ -206,6 +229,12 @@ final class AppModel: ObservableObject {
 
     func openAudioPrivacySettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    func openMicrophonePrivacySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
             NSWorkspace.shared.open(url)
         }
     }
@@ -253,7 +282,32 @@ final class AppModel: ObservableObject {
         openSettings(tab: .models)
     }
 
-    private func handleTranscript(_ event: TranscriptEvent) async {
+    private func consumeTranscripts(
+        provider: any TranscriptionProvider,
+        audio: AsyncStream<PCMChunk>,
+        source: AudioSource
+    ) -> Task<Void, Never> {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let events = await provider.transcribe(audio)
+                for try await event in events {
+                    guard !Task.isCancelled else { break }
+                    if case .segment(var segment) = event {
+                        segment.audioSource = source
+                        await self.handleTranscript(.segment(segment))
+                    } else {
+                        await self.handleTranscript(event)
+                    }
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                await self.fail(Self.captureFailure(from: error))
+            }
+        }
+    }
+
+    func handleTranscript(_ event: TranscriptEvent) async {
         let segments = await segmentStore.merge(
             event,
             limit: overlayRetentionLimit
@@ -275,8 +329,13 @@ final class AppModel: ObservableObject {
         }
         guard let segment = event.segment else { return }
         if segment.isFinal {
-            try? await sessionLogWriter.recordTranscript(id: segment.id, text: segment.sourceText)
+            try? await sessionLogWriter.recordTranscript(
+                id: segment.id,
+                text: segment.sourceText,
+                audioSource: segment.audioSource
+            )
         }
+        guard (overlayState.microphoneMode ?? .off).translates(segment.audioSource) else { return }
 
         if segment.language == preferences.targetLanguage {
             await translationScheduler.submit(
@@ -383,7 +442,8 @@ final class AppModel: ObservableObject {
             sourceMode: preferences.sourceMode,
             chineseScriptPreference: preferences.chineseScriptPreference,
             modelDirectory: directory,
-            endpointSilenceSeconds: preferences.endpointSilenceSeconds
+            endpointSilenceSeconds: preferences.endpointSilenceSeconds,
+            vocabulary: TranscriptionVocabulary.terms(from: preferences.transcriptionVocabulary)
         )
     }
 
@@ -433,6 +493,7 @@ final class AppModel: ObservableObject {
                     if await recovery.prepareForSleep(state: captureState) {
                         overlayState.isListening = false
                         await audioCapture.suspendForSleep()
+                        await microphoneCapture.suspendForSleep()
                     }
                 case .didWake:
                     if await recovery.shouldRestartAfterWake(
@@ -441,6 +502,7 @@ final class AppModel: ObservableObject {
                     ) {
                         do {
                             try await audioCapture.resumeAfterWake()
+                            try await microphoneCapture.resumeAfterWake()
                             overlayState.isListening = true
                         } catch {
                             await fail(Self.captureFailure(from: error))
@@ -477,12 +539,23 @@ final class AppModel: ObservableObject {
         captureState = try await stateMachine.transition(to: state)
     }
 
+    private func startMicrophoneFailureMonitoring() {
+        microphoneFailuresTask = Task { [weak self] in
+            guard let self else { return }
+            for await error in microphoneCapture.failures {
+                guard captureIsActive else { continue }
+                await fail(Self.captureFailure(from: error))
+            }
+        }
+    }
+
     private var overlayRetentionLimit: Int {
         preferences.overlayLineCount * 4
     }
 
     private func fail(_ failure: CaptureFailure) async {
         if captureState == .stopping { return }
+        if case .failed = captureState { return }
         do {
             captureState = try await stateMachine.transition(to: .failed(failure))
         } catch {
@@ -491,13 +564,20 @@ final class AppModel: ObservableObject {
         overlayState.statusText = AppCopy.captureFailure(failure, language: preferences.appDisplayLanguage)
         transcriptionTask?.cancel()
         transcriptionTask = nil
+        microphoneTranscriptionTask?.cancel()
+        microphoneTranscriptionTask = nil
         await activeTranscriptionProvider?.stop()
         activeTranscriptionProvider = nil
+        await microphoneTranscriptionProvider?.stop()
+        microphoneTranscriptionProvider = nil
         await translationScheduler.cancelAll()
         await appleTranslation.cancelAll()
         await qwenTranslation.cancelAll()
         await qwenTranslation.unload()
         await audioCapture.stop()
+        await microphoneCapture.stop()
+        overlayState.microphoneMode = nil
+        overlayCoordinator.applyPreferences()
         await stopSessionLogging()
         mlxTranslationReady = false
         memoryPressureTranslationFallbackActive = false
@@ -582,6 +662,13 @@ final class AppModel: ObservableObject {
 
     private static func captureFailure(from error: Error) -> CaptureFailure {
         if let failure = error as? CaptureFailure { return failure }
+        if let microphoneError = error as? MicrophoneCaptureError {
+            switch microphoneError {
+            case .permissionDenied: return .microphonePermissionDenied
+            case .inputUnavailable: return .microphoneUnavailable
+            case .captureFailed: return .microphoneCaptureFailed
+            }
+        }
         if let audioError = error as? CoreAudioTapError {
             switch audioError {
             case .permissionDenied: return .permissionDenied

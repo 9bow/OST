@@ -1,1 +1,2 @@
 "NSAudioCaptureUsageDescription" = "OST needs access to transcribe system audio and show local translation subtitles.";
+"NSMicrophoneUsageDescription" = "OST uses the microphone for local transcription and translation only when you enable microphone input.";

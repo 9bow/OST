@@ -8,11 +8,13 @@ final class OverlayState: ObservableObject {
     @Published var statusText = "Waiting"
     @Published var detectedLanguage: SupportedLanguage?
     @Published var isListening = false
+    @Published var microphoneMode: MicrophoneMode?
 
     func clear() {
         segments.removeAll()
         detectedLanguage = nil
         isListening = false
+        microphoneMode = nil
         statusText = "Waiting"
     }
 }

@@ -1,1 +1,2 @@
 "NSAudioCaptureUsageDescription" = "OST 需要访问系统音频，以便在本机转写并显示翻译字幕。";
+"NSMicrophoneUsageDescription" = "仅在启用麦克风输入时，OST 才会在本机转写并翻译麦克风音频。";

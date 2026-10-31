@@ -2,21 +2,24 @@ import Foundation
 
 public actor SegmentStore {
     private var finalized: [TranscriptSegment] = []
-    private var volatile: TranscriptSegment?
+    private var volatile: [AudioSource: TranscriptSegment] = [:]
 
     public init() {}
 
     @discardableResult
     public func merge(_ event: TranscriptEvent, limit: Int = 3) -> [TranscriptSegment] {
-        guard case .segment(let segment) = event else { return visibleSegments(limit: limit) }
+        guard case .segment(var segment) = event else { return visibleSegments(limit: limit) }
+        let source = segment.audioSource
 
         if segment.isFinal {
-            if volatile?.id == segment.id {
-                volatile = nil
+            if let preview = volatile[source], preview.id == segment.id {
+                segment = preservingTranslation(from: preview, in: segment)
+                volatile[source] = nil
             }
             if let index = finalized.firstIndex(where: { $0.id == segment.id }) {
                 finalized[index] = preservingTranslation(from: finalized[index], in: segment)
             } else if let lastIndex = finalized.indices.last,
+                      finalized[lastIndex].audioSource == source,
                       normalized(finalized[lastIndex].sourceText) == normalized(segment.sourceText),
                       overlaps(finalized[lastIndex], segment) {
                 finalized[lastIndex] = preservingTranslation(from: finalized[lastIndex], in: segment)
@@ -31,19 +34,20 @@ public actor SegmentStore {
                 return visibleSegments(limit: limit)
             }
             if let latestFinal = finalized.last,
+               latestFinal.audioSource == source,
                normalized(latestFinal.sourceText) == normalized(segment.sourceText),
                overlaps(latestFinal, segment) {
                 return visibleSegments(limit: limit)
             }
-            if let volatile,
-               volatile.id != segment.id,
-               volatile.startTime > segment.startTime {
+            if let current = volatile[source],
+               current.id != segment.id,
+               current.startTime > segment.startTime {
                 return visibleSegments(limit: limit)
             }
-            if let existing = volatile, existing.id == segment.id {
-                volatile = preservingTranslation(from: existing, in: segment)
+            if let existing = volatile[source], existing.id == segment.id {
+                volatile[source] = preservingTranslation(from: existing, in: segment)
             } else {
-                volatile = segment
+                volatile[source] = segment
             }
         }
         return visibleSegments(limit: limit)
@@ -54,8 +58,8 @@ public actor SegmentStore {
         text: String,
         limit: Int = 3
     ) -> [TranscriptSegment] {
-        if volatile?.id == segmentID {
-            volatile?.translatedText = text
+        if let source = volatile.first(where: { $0.value.id == segmentID })?.key {
+            volatile[source]?.translatedText = text
         } else if let index = finalized.firstIndex(where: { $0.id == segmentID }) {
             finalized[index].translatedText = text
         }
@@ -64,13 +68,17 @@ public actor SegmentStore {
 
     public func visibleSegments(limit: Int = 3) -> [TranscriptSegment] {
         guard limit > 0 else { return [] }
-        let finalizedTail = finalized.suffix(max(0, limit - (volatile == nil ? 0 : 1)))
-        return Array(finalizedTail) + (volatile.map { [$0] } ?? [])
+        let previews = volatile.values.sorted {
+            if $0.startTime != $1.startTime { return $0.startTime < $1.startTime }
+            return $0.audioSource.rawValue < $1.audioSource.rawValue
+        }.suffix(limit)
+        let finalizedTail = finalized.suffix(max(0, limit - previews.count))
+        return Array(finalizedTail) + previews
     }
 
     public func clear() {
         finalized.removeAll(keepingCapacity: false)
-        volatile = nil
+        volatile.removeAll(keepingCapacity: false)
     }
 
     private func preservingTranslation(

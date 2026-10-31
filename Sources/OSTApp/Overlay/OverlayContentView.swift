@@ -92,6 +92,9 @@ struct OverlayContentView: View {
             foregroundColor: color(preferences.sourceColor),
             liveFont: .system(size: preferences.sourceFontSize, weight: .regular),
             liveForegroundColor: color(preferences.sourceColor),
+            microphoneColor: color(preferences.microphoneColor),
+            microphoneEnabled: (state.microphoneMode ?? preferences.microphoneMode).isEnabled,
+            microphoneLabel: t("Microphone"),
             alignment: preferences.subtitleAlignment,
             showsPlaceholder: !state.isListening
         )
@@ -106,6 +109,9 @@ struct OverlayContentView: View {
             foregroundColor: color(preferences.translationColor),
             liveFont: .system(size: preferences.previewFontSize, weight: .semibold),
             liveForegroundColor: color(preferences.previewColor),
+            microphoneColor: color(preferences.microphoneColor),
+            microphoneEnabled: (state.microphoneMode ?? preferences.microphoneMode) == .transcriptionAndTranslation,
+            microphoneLabel: t("Microphone"),
             alignment: preferences.subtitleAlignment,
             showsPlaceholder: !state.isListening
         )
@@ -159,6 +165,9 @@ private struct LatestSubtitleView: View {
     let foregroundColor: Color
     let liveFont: Font
     let liveForegroundColor: Color
+    let microphoneColor: Color
+    let microphoneEnabled: Bool
+    let microphoneLabel: String
     let alignment: SubtitleAlignment
     let showsPlaceholder: Bool
 
@@ -174,8 +183,8 @@ private struct LatestSubtitleView: View {
         entries.filter(\.segment.isFinal)
     }
 
-    private var liveEntry: Entry? {
-        return entries.last { !$0.segment.isFinal }
+    private var liveEntries: [Entry] {
+        entries.filter { !$0.segment.isFinal }
     }
 
     private var liveAccessibilityLabel: String {
@@ -196,7 +205,7 @@ private struct LatestSubtitleView: View {
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
                     if stableEntries.isEmpty {
-                        if liveEntry == nil, showsPlaceholder {
+                        if liveEntries.isEmpty, showsPlaceholder {
                             Text(placeholder)
                                 .opacity(0.7)
                                 .frame(maxWidth: .infinity, alignment: alignment.frameAlignment)
@@ -204,7 +213,9 @@ private struct LatestSubtitleView: View {
                     } else {
                         LazyVStack(alignment: alignment.horizontalAlignment, spacing: 5) {
                             ForEach(stableEntries) { entry in
-                                Text(entry.text)
+                                subtitle(entry.text, source: entry.segment.audioSource)
+                                    .foregroundStyle(entry.segment.audioSource == .microphone ? microphoneColor : foregroundColor)
+                                    .accessibilityLabel(entry.segment.audioSource == .microphone ? "\(microphoneLabel): \(entry.text)" : entry.text)
                                     .opacity(entry.id == stableEntries.last?.id ? 1 : 0.72)
                                     .frame(maxWidth: .infinity, alignment: alignment.frameAlignment)
                             }
@@ -221,15 +232,18 @@ private struct LatestSubtitleView: View {
                 .onAppear { scrollToLatest(using: proxy) }
                 .onChange(of: revision) { _, _ in scrollToLatest(using: proxy) }
             }
-            Text(liveEntry?.text ?? " ")
-                .font(liveFont)
-                .foregroundStyle(liveForegroundColor)
-                .opacity(liveEntry == nil ? 0 : 0.9)
-                .lineLimit(OverlaySizing.previewLineCount, reservesSpace: true)
-                .truncationMode(.head)
-                .frame(maxWidth: .infinity, alignment: alignment.frameAlignment)
-                .accessibilityHidden(liveEntry == nil)
-                .accessibilityLabel("\(liveAccessibilityLabel): \(liveEntry?.text ?? "")")
+            ForEach(AudioSource.allCases.filter { $0 == .systemAudio || microphoneEnabled }, id: \.self) { source in
+                let entry = liveEntries.last { $0.segment.audioSource == source }
+                subtitle(entry?.text ?? " ", source: source)
+                    .font(liveFont)
+                    .foregroundStyle(source == .microphone ? microphoneColor : liveForegroundColor)
+                    .opacity(entry == nil ? 0 : 0.9)
+                    .lineLimit(OverlaySizing.previewLineCount, reservesSpace: true)
+                    .truncationMode(.head)
+                    .frame(maxWidth: .infinity, alignment: alignment.frameAlignment)
+                    .accessibilityHidden(entry == nil)
+                    .accessibilityLabel("\(source == .microphone ? microphoneLabel : liveAccessibilityLabel): \(entry?.text ?? "")")
+            }
         }
         .multilineTextAlignment(alignment.textAlignment)
         .lineSpacing(2)
@@ -242,6 +256,12 @@ private struct LatestSubtitleView: View {
         DispatchQueue.main.async {
             proxy.scrollTo(bottomID, anchor: .bottom)
         }
+    }
+
+    private func subtitle(_ text: String, source: AudioSource) -> Text {
+        source == .microphone
+            ? Text("\(Image(systemName: "mic.fill")) \(text)")
+            : Text(text)
     }
 }
 

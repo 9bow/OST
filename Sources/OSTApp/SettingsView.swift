@@ -126,6 +126,20 @@ struct SettingsView: View {
                 Text(t("Simplified")).tag(ChineseScriptPreference.simplified)
                 Text(t("Traditional")).tag(ChineseScriptPreference.traditional)
             }
+            Section(t("Microphone")) {
+                Picker(t("Microphone input"), selection: microphoneModeBinding) {
+                    Text(t("Off")).tag(MicrophoneMode.off)
+                    Text(t("Transcribe only")).tag(MicrophoneMode.transcription)
+                    Text(t("Transcribe and translate")).tag(MicrophoneMode.transcriptionAndTranslation)
+                }
+                .accessibilityIdentifier("microphoneMode")
+                Text(t("System audio stays enabled. Microphone input uses the selected input language and providers. Restart capture after changes."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(t("Capturing both inputs uses more memory and processing time. Use headphones to avoid transcribing speaker audio twice."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section(t("Endpoint detection (EPD)")) {
                 LabeledContent(t("Silence interval")) {
                     HStack {
@@ -168,6 +182,28 @@ struct SettingsView: View {
             Text(t("Provider and model changes apply when the next capture starts."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Section(t("Keyword boosting")) {
+                TextEditor(text: transcriptionVocabularyBinding)
+                    .font(.body)
+                    .frame(minHeight: 90)
+                    .accessibilityLabel(t("Preferred transcription terms"))
+                    .accessibilityIdentifier("transcriptionVocabulary")
+                Text(t("Enter one short term per line, such as PyTorch or a product name. The first 100 unique terms are used."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(t("Qwen3 ASR uses these hints for confirmed transcripts, not live previews. Recognition is not guaranteed. Restart capture after changes."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if model.preferences.transcriptionProvider == .appleSpeech {
+                    Text(t("Apple Speech does not use these terms. Select Qwen3 ASR to enable keyword boosting."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text("\(model.preferences.transcriptionVocabulary.count)/4,000")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
 
             if model.preferences.translationProvider == .qwen3Translation {
                 Section(t("MLX translation prompt")) {
@@ -276,6 +312,19 @@ struct SettingsView: View {
 
     private var appearanceTab: some View {
         Form {
+            Section(t("Microphone subtitles")) {
+                ColorPicker(t("Text color"), selection: microphoneColorBinding, supportsOpacity: true)
+                    .accessibilityIdentifier("microphoneColor")
+                Text(t("Microphone transcripts, translations, and live previews use this color and a microphone symbol."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                stylePreview(
+                    text: t("Microphone subtitles appear here."),
+                    fontSize: model.preferences.sourceFontSize,
+                    weight: .regular,
+                    foregroundColor: model.preferences.microphoneColor
+                )
+            }
             Section(t("Source transcript")) {
                 Text(t("Applies to confirmed transcript history and the two-line current transcription preview below it."))
                     .font(.caption)
@@ -393,6 +442,7 @@ struct SettingsView: View {
         Form {
             LabeledContent(t("Permission")) { Text(permissionStatus) }
             Button(t("Open System Audio Permission Settings")) { model.openAudioPrivacySettings() }
+            Button(t("Open Microphone Permission Settings")) { model.openMicrophonePrivacySettings() }
             Section(t("Session files")) {
                 Toggle(t("Save each session to text files"), isOn: sessionLoggingEnabledBinding)
                 Text(t("A session starts when capture starts and ends when capture stops. Confirmed transcripts and translations are saved as separate text files. This setting is off by default."))
@@ -434,6 +484,8 @@ struct SettingsView: View {
         model.preferences.sourceColor.contrastRatio(against: model.preferences.backgroundColor) < 4.5
             || model.preferences.translationColor.contrastRatio(against: model.preferences.backgroundColor) < 4.5
             || model.preferences.previewColor.contrastRatio(against: model.preferences.backgroundColor) < 4.5
+            || (model.preferences.microphoneMode.isEnabled
+                && model.preferences.microphoneColor.contrastRatio(against: model.preferences.backgroundColor) < 4.5)
     }
 
     private func stylePreview(
@@ -621,8 +673,21 @@ struct SettingsView: View {
     private var mlxTranslationPromptBinding: Binding<String> {
         Binding(get: { model.preferences.mlxTranslationPrompt }, set: { model.preferences.mlxTranslationPrompt = $0 })
     }
+
+    private var transcriptionVocabularyBinding: Binding<String> {
+        Binding(
+            get: { model.preferences.transcriptionVocabulary },
+            set: { model.preferences.transcriptionVocabulary = $0 }
+        )
+    }
     private var sourceFontSizeBinding: Binding<Double> {
         Binding(get: { model.preferences.sourceFontSize }, set: { model.preferences.sourceFontSize = $0 })
+    }
+    private var microphoneModeBinding: Binding<MicrophoneMode> {
+        Binding(get: { model.preferences.microphoneMode }, set: { model.preferences.microphoneMode = $0 })
+    }
+    private var microphoneColorBinding: Binding<Color> {
+        colorBinding(get: { model.preferences.microphoneColor }, set: { model.preferences.microphoneColor = $0 })
     }
     private var translationFontSizeBinding: Binding<Double> {
         Binding(get: { model.preferences.translationFontSize }, set: { model.preferences.translationFontSize = $0 })

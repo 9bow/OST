@@ -13,7 +13,6 @@ plutil -lint "$MAIN_INFO" "$MAIN_ENTITLEMENTS" "$XPC_INFO" "$XPC_ENTITLEMENTS"
 
 for key in \
   com.apple.security.network.client \
-  com.apple.security.device.audio-input \
   com.apple.security.personal-information.accessibility; do
   if /usr/libexec/PlistBuddy -c "Print :$key" "$MAIN_ENTITLEMENTS" >/dev/null 2>&1; then
     echo "Main app source entitlements unexpectedly contain $key." >&2
@@ -21,7 +20,7 @@ for key in \
   fi
 done
 
-for key in NSMicrophoneUsageDescription NSScreenCaptureUsageDescription NSSpeechRecognitionUsageDescription NSAccessibilityUsageDescription; do
+for key in NSScreenCaptureUsageDescription NSSpeechRecognitionUsageDescription NSAccessibilityUsageDescription; do
   if plutil -extract "$key" raw "$MAIN_INFO" >/dev/null 2>&1; then
     echo "Main app Info.plist unexpectedly contains $key." >&2
     exit 1
@@ -29,6 +28,11 @@ for key in NSMicrophoneUsageDescription NSScreenCaptureUsageDescription NSSpeech
 done
 
 plutil -extract NSAudioCaptureUsageDescription raw "$MAIN_INFO" >/dev/null
+plutil -extract NSMicrophoneUsageDescription raw "$MAIN_INFO" >/dev/null
+if [[ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.device.audio-input' "$MAIN_ENTITLEMENTS")" != "true" ]]; then
+  echo "Main app source entitlements do not allow microphone input." >&2
+  exit 1
+fi
 /usr/libexec/PlistBuddy -c 'Print :com.apple.security.network.client' "$XPC_ENTITLEMENTS" >/dev/null
 
 for key in \
@@ -75,6 +79,12 @@ if codesign -d --entitlements - "$APP" 2>&1 | /usr/bin/grep -Eq 'com.apple.secur
   echo "Main app unexpectedly has outbound network entitlement." >&2
   exit 1
 fi
+
+if ! codesign -d --entitlements - "$APP" 2>&1 | /usr/bin/grep -Eq 'com.apple.security.device.audio-input'; then
+  echo "Signed main app does not allow microphone input." >&2
+  exit 1
+fi
+plutil -extract NSMicrophoneUsageDescription raw "$APP/Contents/Info.plist" >/dev/null
 
 if ! codesign -d --entitlements - "$XPC" 2>&1 | /usr/bin/grep -Eq 'com.apple.security.network.client'; then
   echo "Downloader XPC is missing outbound network entitlement." >&2

@@ -1,1 +1,2 @@
 "NSAudioCaptureUsageDescription" = "재생 중인 시스템 오디오를 이 Mac에서 받아쓰기하고 번역 자막으로 표시하기 위해 필요합니다.";
+"NSMicrophoneUsageDescription" = "마이크 입력을 켠 경우에만 이 Mac에서 마이크 음성을 받아쓰기하고 번역하기 위해 사용합니다.";

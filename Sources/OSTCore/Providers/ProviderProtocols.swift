@@ -38,17 +38,20 @@ public struct TranscriptionConfiguration: Sendable, Equatable {
     public let chineseScriptPreference: ChineseScriptPreference
     public let modelDirectory: URL?
     public let endpointSilenceSeconds: Double
+    public let vocabulary: [String]
 
     public init(
         sourceMode: SourceLanguageMode,
         chineseScriptPreference: ChineseScriptPreference,
         modelDirectory: URL? = nil,
-        endpointSilenceSeconds: Double = 0.8
+        endpointSilenceSeconds: Double = 0.8,
+        vocabulary: [String] = []
     ) {
         self.sourceMode = sourceMode
         self.chineseScriptPreference = chineseScriptPreference
         self.modelDirectory = modelDirectory
         self.endpointSilenceSeconds = min(max(endpointSilenceSeconds, 0.4), 2)
+        self.vocabulary = TranscriptionVocabulary.terms(from: vocabulary.joined(separator: "\n"))
     }
 }
 

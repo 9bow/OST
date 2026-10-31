@@ -83,9 +83,26 @@ final class PreferencesStore: ObservableObject {
         set { snapshot.mlxTranslationPrompt = String(newValue.prefix(4_000)) }
     }
 
+    var transcriptionVocabulary: String {
+        get { snapshot.transcriptionVocabulary }
+        set {
+            snapshot.transcriptionVocabulary = String(newValue.prefix(TranscriptionVocabulary.maximumCharacters))
+        }
+    }
+
     var overlayLayout: OverlayLayout {
         get { snapshot.overlayLayout }
         set { snapshot.overlayLayout = newValue }
+    }
+
+    var microphoneMode: MicrophoneMode {
+        get { snapshot.microphoneMode }
+        set { snapshot.microphoneMode = newValue }
+    }
+
+    var microphoneColor: RGBAColor {
+        get { snapshot.microphoneColor }
+        set { snapshot.microphoneColor = newValue }
     }
 
     var subtitleDisplayMode: SubtitleDisplayMode {

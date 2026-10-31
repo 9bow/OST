@@ -11,6 +11,7 @@ public enum DisplaySegmentGrouper {
             guard segment.isFinal,
                   let previous = grouped.last,
                   previous.isFinal,
+                  previous.audioSource == segment.audioSource,
                   previous.language == segment.language,
                   !hasTerminalPunctuation(previous.sourceText),
                   joined(previous.sourceText, segment.sourceText).count <= maximumCharacters,

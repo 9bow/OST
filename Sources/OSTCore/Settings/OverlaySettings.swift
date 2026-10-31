@@ -36,6 +36,18 @@ public enum OverlayLayout: String, Codable, CaseIterable, Sendable {
     case split
 }
 
+public enum MicrophoneMode: String, Codable, CaseIterable, Sendable {
+    case off
+    case transcription
+    case transcriptionAndTranslation
+
+    public var isEnabled: Bool { self != .off }
+
+    public func translates(_ source: AudioSource) -> Bool {
+        source == .systemAudio || self == .transcriptionAndTranslation
+    }
+}
+
 public enum SubtitleDisplayMode: String, Codable, CaseIterable, Sendable {
     case both
     case sourceOnly
@@ -76,6 +88,9 @@ public struct PreferencesSnapshot: Codable, Sendable, Equatable {
     public var selectedASRModelID: String
     public var selectedTranslationModelID: String
     public var mlxTranslationPrompt: String
+    public var transcriptionVocabulary: String
+    public var microphoneMode: MicrophoneMode
+    public var microphoneColor: RGBAColor
     public var overlayLayout: OverlayLayout
     public var subtitleDisplayMode: SubtitleDisplayMode
     public var overlayLocked: Bool
@@ -104,6 +119,9 @@ public struct PreferencesSnapshot: Codable, Sendable, Equatable {
         selectedASRModelID: String = "mlx-community/Qwen3-ASR-0.6B-4bit",
         selectedTranslationModelID: String = "mlx-community/Qwen3-0.6B-4bit",
         mlxTranslationPrompt: String = MLXPromptDefaults.translation,
+        transcriptionVocabulary: String = "",
+        microphoneMode: MicrophoneMode = .off,
+        microphoneColor: RGBAColor = RGBAColor(red: 0.35, green: 0.85, blue: 1),
         overlayLayout: OverlayLayout = .combined,
         subtitleDisplayMode: SubtitleDisplayMode = .both,
         overlayLocked: Bool = false,
@@ -131,6 +149,9 @@ public struct PreferencesSnapshot: Codable, Sendable, Equatable {
         self.selectedASRModelID = selectedASRModelID
         self.selectedTranslationModelID = selectedTranslationModelID
         self.mlxTranslationPrompt = String(mlxTranslationPrompt.prefix(4_000))
+        self.transcriptionVocabulary = String(transcriptionVocabulary.prefix(TranscriptionVocabulary.maximumCharacters))
+        self.microphoneMode = microphoneMode
+        self.microphoneColor = microphoneColor
         self.overlayLayout = overlayLayout
         self.subtitleDisplayMode = subtitleDisplayMode
         self.overlayLocked = overlayLocked
@@ -160,6 +181,9 @@ public struct PreferencesSnapshot: Codable, Sendable, Equatable {
         case selectedASRModelID
         case selectedTranslationModelID
         case mlxTranslationPrompt
+        case transcriptionVocabulary
+        case microphoneMode
+        case microphoneColor
         case overlayLayout
         case subtitleDisplayMode
         case overlayLocked
@@ -193,6 +217,9 @@ public struct PreferencesSnapshot: Codable, Sendable, Equatable {
             selectedASRModelID: try values.decodeIfPresent(String.self, forKey: .selectedASRModelID) ?? "mlx-community/Qwen3-ASR-0.6B-4bit",
             selectedTranslationModelID: try values.decodeIfPresent(String.self, forKey: .selectedTranslationModelID) ?? "mlx-community/Qwen3-0.6B-4bit",
             mlxTranslationPrompt: try values.decodeIfPresent(String.self, forKey: .mlxTranslationPrompt) ?? MLXPromptDefaults.translation,
+            transcriptionVocabulary: try values.decodeIfPresent(String.self, forKey: .transcriptionVocabulary) ?? "",
+            microphoneMode: try values.decodeIfPresent(MicrophoneMode.self, forKey: .microphoneMode) ?? .off,
+            microphoneColor: try values.decodeIfPresent(RGBAColor.self, forKey: .microphoneColor) ?? RGBAColor(red: 0.35, green: 0.85, blue: 1),
             overlayLayout: try values.decodeIfPresent(OverlayLayout.self, forKey: .overlayLayout) ?? .combined,
             subtitleDisplayMode: try values.decodeIfPresent(SubtitleDisplayMode.self, forKey: .subtitleDisplayMode) ?? .both,
             overlayLocked: try values.decodeIfPresent(Bool.self, forKey: .overlayLocked) ?? true,
@@ -224,16 +251,18 @@ public enum OverlaySizing {
         translationFontSize: Double,
         previewFontSize: Double? = nil,
         displayMode: SubtitleDisplayMode = .both,
+        microphoneMode: MicrophoneMode = .off,
         maximumHeight: Double
     ) -> CGSize {
         switch displayMode {
         case .sourceOnly:
-            return sourceSize(lineCount: lineCount, fontSize: sourceFontSize, maximumHeight: maximumHeight)
+            return sourceSize(lineCount: lineCount, fontSize: sourceFontSize, microphoneMode: microphoneMode, maximumHeight: maximumHeight)
         case .translationOnly:
             return translationSize(
                 lineCount: lineCount,
                 fontSize: translationFontSize,
                 previewFontSize: previewFontSize,
+                microphoneMode: microphoneMode,
                 maximumHeight: maximumHeight
             )
         case .both:
@@ -241,9 +270,11 @@ public enum OverlaySizing {
         }
         let confirmedLines = Double(min(max(lineCount, 2), 10))
         let previewLines = Double(previewLineCount)
-        let requestedHeight = sourceFontSize * 1.25 * (confirmedLines + previewLines)
+        let sourcePreviewLines = previewLines * (microphoneMode.isEnabled ? 2 : 1)
+        let translationPreviewLines = previewLines * (microphoneMode.translates(.microphone) ? 2 : 1)
+        let requestedHeight = sourceFontSize * 1.25 * (confirmedLines + sourcePreviewLines)
             + translationFontSize * 1.25 * confirmedLines
-            + (previewFontSize ?? translationFontSize) * 1.25 * previewLines
+            + (previewFontSize ?? translationFontSize) * 1.25 * translationPreviewLines
             + 52
         return CGSize(width: 720, height: cappedHeight(requestedHeight, maximumHeight: maximumHeight))
     }
@@ -251,9 +282,10 @@ public enum OverlaySizing {
     public static func sourceSize(
         lineCount: Int,
         fontSize: Double,
+        microphoneMode: MicrophoneMode = .off,
         maximumHeight: Double
     ) -> CGSize {
-        let lines = Double(min(max(lineCount, 2), 10) + previewLineCount)
+        let lines = Double(min(max(lineCount, 2), 10) + previewLineCount * (microphoneMode.isEnabled ? 2 : 1))
         let requestedHeight = fontSize * 1.25 * lines + 28
         return CGSize(width: 720, height: cappedHeight(requestedHeight, maximumHeight: maximumHeight))
     }
@@ -262,10 +294,11 @@ public enum OverlaySizing {
         lineCount: Int,
         fontSize: Double,
         previewFontSize: Double? = nil,
+        microphoneMode: MicrophoneMode = .off,
         maximumHeight: Double
     ) -> CGSize {
         let confirmedLines = Double(min(max(lineCount, 2), 10))
-        let previewLines = Double(previewLineCount)
+        let previewLines = Double(previewLineCount * (microphoneMode.translates(.microphone) ? 2 : 1))
         let requestedHeight = fontSize * 1.25 * confirmedLines
             + (previewFontSize ?? fontSize) * 1.25 * previewLines
             + 28

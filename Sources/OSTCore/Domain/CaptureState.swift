@@ -3,6 +3,9 @@ import Foundation
 public enum CaptureFailure: Error, Codable, Sendable, Equatable, LocalizedError {
     case permissionDenied
     case permissionRevoked
+    case microphonePermissionDenied
+    case microphoneUnavailable
+    case microphoneCaptureFailed
     case outputDeviceUnavailable
     case unsupportedLanguage(SupportedLanguage)
     case speechLanguagePackUnavailable(SupportedLanguage)
@@ -18,6 +21,9 @@ public enum CaptureFailure: Error, Codable, Sendable, Equatable, LocalizedError 
         switch self {
         case .permissionDenied: "시스템 오디오 권한이 거부되었습니다."
         case .permissionRevoked: "시스템 오디오 권한이 철회되었습니다."
+        case .microphonePermissionDenied: "마이크 권한이 거부되었거나 철회되었습니다."
+        case .microphoneUnavailable: "사용 가능한 마이크가 없습니다."
+        case .microphoneCaptureFailed: "마이크 캡처에 실패했습니다."
         case .outputDeviceUnavailable: "사용 가능한 출력 장치가 없습니다."
         case .unsupportedLanguage(let language): "지원되지 않는 언어입니다: \(language.displayName)"
         case .speechLanguagePackUnavailable(let language): "받아쓰기 언어팩을 준비할 수 없습니다: \(language.displayName)"

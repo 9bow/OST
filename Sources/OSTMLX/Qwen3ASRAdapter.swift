@@ -274,11 +274,12 @@ public actor Qwen3ASRAdapter: TranscriptionProvider {
         case .fixed(let language): requestedLanguage = language.modelLanguageName
         case .automatic: requestedLanguage = nil
         }
+        let prompt = MLXPromptDefaults.renderTranscription(vocabulary: configuration.vocabulary)
         let output = model.generate(
             audio: MLXArray(samples),
             maxTokens: 512,
             temperature: 0,
-            context: MLXPromptDefaults.transcription,
+            context: prompt,
             language: requestedLanguage,
             chunkDuration: 15,
             minChunkDuration: 1
@@ -301,7 +302,7 @@ public actor Qwen3ASRAdapter: TranscriptionProvider {
         }
         let text = MLXModelOutputSanitizer.transcription(
             output.text,
-            prompt: MLXPromptDefaults.transcription,
+            prompt: prompt,
             language: language
         )
         guard !text.isEmpty else {

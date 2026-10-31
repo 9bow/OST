@@ -1,5 +1,10 @@
 import Foundation
 
+public enum AudioSource: String, Sendable, CaseIterable {
+    case systemAudio
+    case microphone
+}
+
 public struct PCMChunk: Sendable, Equatable {
     public let samples: [Float]
     public let sampleRate: Double
@@ -20,6 +25,7 @@ public struct TranscriptSegment: Identifiable, Sendable, Equatable {
     public var sourceText: String
     public var translatedText: String?
     public var isFinal: Bool
+    public var audioSource: AudioSource
 
     public init(
         id: UUID = UUID(),
@@ -28,7 +34,8 @@ public struct TranscriptSegment: Identifiable, Sendable, Equatable {
         language: SupportedLanguage,
         sourceText: String,
         translatedText: String? = nil,
-        isFinal: Bool
+        isFinal: Bool,
+        audioSource: AudioSource = .systemAudio
     ) {
         self.id = id
         self.startTime = startTime
@@ -37,6 +44,7 @@ public struct TranscriptSegment: Identifiable, Sendable, Equatable {
         self.sourceText = sourceText
         self.translatedText = translatedText
         self.isFinal = isFinal
+        self.audioSource = audioSource
     }
 }
 

@@ -31,6 +31,7 @@ final class OverlayCoordinator {
         let previewFontSize: Double
         // Legacy sizing signatures omit this value when both tracks are visible.
         let subtitleDisplayMode: SubtitleDisplayMode?
+        let microphoneMode: MicrophoneMode?
     }
 
     private let state: OverlayState
@@ -55,7 +56,8 @@ final class OverlayCoordinator {
             sourceFontSize: preferences.sourceFontSize,
             translationFontSize: preferences.translationFontSize,
             previewFontSize: preferences.previewFontSize,
-            subtitleDisplayMode: preferences.subtitleDisplayMode == .both ? nil : preferences.subtitleDisplayMode
+            subtitleDisplayMode: preferences.subtitleDisplayMode == .both ? nil : preferences.subtitleDisplayMode,
+            microphoneMode: preferences.microphoneMode == .off ? nil : preferences.microphoneMode
         )
         for kind in [OverlayPanelKind.combined, .source, .translation] {
             if let data = UserDefaults.standard.data(forKey: sizingDefaultsKey(for: kind)),
@@ -97,7 +99,9 @@ final class OverlayCoordinator {
             sourceFontSize: preferences.sourceFontSize,
             translationFontSize: preferences.translationFontSize,
             previewFontSize: preferences.previewFontSize,
-            subtitleDisplayMode: preferences.subtitleDisplayMode == .both ? nil : preferences.subtitleDisplayMode
+            subtitleDisplayMode: preferences.subtitleDisplayMode == .both ? nil : preferences.subtitleDisplayMode,
+            microphoneMode: (state.microphoneMode ?? preferences.microphoneMode) == .off
+                ? nil : (state.microphoneMode ?? preferences.microphoneMode)
         )
         sizingSignature = newSizingSignature
         switch preferences.overlayLayout {
@@ -263,12 +267,14 @@ final class OverlayCoordinator {
                 translationFontSize: preferences.translationFontSize,
                 previewFontSize: preferences.previewFontSize,
                 displayMode: preferences.subtitleDisplayMode,
+                microphoneMode: state.microphoneMode ?? preferences.microphoneMode,
                 maximumHeight: maximumHeight
             )
         case .source:
             return OverlaySizing.sourceSize(
                 lineCount: preferences.overlayLineCount,
                 fontSize: preferences.sourceFontSize,
+                microphoneMode: state.microphoneMode ?? preferences.microphoneMode,
                 maximumHeight: maximumHeight
             )
         case .translation:
@@ -276,6 +282,7 @@ final class OverlayCoordinator {
                 lineCount: preferences.overlayLineCount,
                 fontSize: preferences.translationFontSize,
                 previewFontSize: preferences.previewFontSize,
+                microphoneMode: state.microphoneMode ?? preferences.microphoneMode,
                 maximumHeight: maximumHeight
             )
         }

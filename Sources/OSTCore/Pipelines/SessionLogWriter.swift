@@ -15,6 +15,7 @@ public actor SessionLogWriter {
     private var orderedIDs: [UUID] = []
     private var transcripts: [UUID: String] = [:]
     private var translations: [UUID: String] = [:]
+    private var audioSources: [UUID: AudioSource] = [:]
 
     public init() {}
 
@@ -38,16 +39,18 @@ public actor SessionLogWriter {
         orderedIDs.removeAll(keepingCapacity: true)
         transcripts.removeAll(keepingCapacity: true)
         translations.removeAll(keepingCapacity: true)
+        audioSources.removeAll(keepingCapacity: true)
         try Data().write(to: urls.transcript, options: .atomic)
         try Data().write(to: urls.translation, options: .atomic)
         return urls
     }
 
-    public func recordTranscript(id: UUID, text: String) throws {
+    public func recordTranscript(id: UUID, text: String, audioSource: AudioSource = .systemAudio) throws {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, let urls else { return }
         register(id)
         transcripts[id] = text
+        audioSources[id] = audioSource
         try render(transcripts, to: urls.transcript)
     }
 
@@ -64,6 +67,7 @@ public actor SessionLogWriter {
         orderedIDs.removeAll()
         transcripts.removeAll()
         translations.removeAll()
+        audioSources.removeAll()
     }
 
     private func register(_ id: UUID) {
@@ -71,7 +75,10 @@ public actor SessionLogWriter {
     }
 
     private func render(_ records: [UUID: String], to url: URL) throws {
-        let text = orderedIDs.compactMap { records[$0] }.joined(separator: "\n")
+        let text = orderedIDs.compactMap { id -> String? in
+            guard let text = records[id] else { return nil }
+            return audioSources[id] == .microphone ? "[Microphone] " + text : text
+        }.joined(separator: "\n")
         let contents = text.isEmpty ? "" : text + "\n"
         try contents.write(to: url, atomically: true, encoding: .utf8)
     }

@@ -1,1 +1,2 @@
 "NSAudioCaptureUsageDescription" = "システム音声をこのMac上で文字起こしし、翻訳字幕を表示するために必要です。";
+"NSMicrophoneUsageDescription" = "マイク入力を有効にした場合にのみ、このMac上でマイク音声の文字起こしと翻訳に使用します。";
