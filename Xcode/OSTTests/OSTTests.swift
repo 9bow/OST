@@ -125,20 +125,28 @@ final class OSTTests: XCTestCase {
             window.orderFront(nil)
             try await Task.sleep(for: .milliseconds(100))
             host.layoutSubtreeIfNeeded()
+            host.displayIfNeeded()
+            window.displayIfNeeded()
             let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
             host.cacheDisplay(in: host.bounds, to: bitmap)
             let image = NSImage(size: host.bounds.size)
             image.addRepresentation(bitmap)
             var coloredPixels = 0
+            var systemPixels = 0
             for y in 0..<bitmap.pixelsHigh {
                 for x in 0..<bitmap.pixelsWide {
-                    if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
-                       color.redComponent > 0.5, color.greenComponent < 0.2, color.blueComponent > 0.5 {
+                    guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                          color.alphaComponent > 0.5 else { continue }
+                    if color.redComponent > 0.5, color.greenComponent < 0.2, color.blueComponent > 0.5 {
                         coloredPixels += 1
+                    }
+                    if color.redComponent > 0.5, color.greenComponent > 0.5, color.blueComponent > 0.5 {
+                        systemPixels += 1
                     }
                 }
             }
             XCTAssertGreaterThan(coloredPixels, 100)
+            XCTAssertGreaterThan(systemPixels, 100)
             let attachment = XCTAttachment(image: image)
             attachment.name = "Microphone \(kind)"
             attachment.lifetime = .keepAlways
