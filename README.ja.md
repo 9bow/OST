@@ -38,9 +38,9 @@ OSTはmacOS 26以降で動作するメニューバーアプリです。システ
 - macOS 26.0以降
 - Apple Silicon
 
-## 0.3.0のインストール
+## 0.3.1のインストール
 
-[v0.3.0リリース](https://github.com/9bow/OST/releases/tag/v0.3.0)から`OST-0.3.0-macos-arm64.zip`をダウンロードして展開し、`OST.app`をアプリケーションフォルダへ移動します。
+[v0.3.1リリース](https://github.com/9bow/OST/releases/tag/v0.3.1)から`OST-0.3.1-macos-arm64.zip`をダウンロードして展開し、`OST.app`をアプリケーションフォルダへ移動します。
 
 リリース環境でDeveloper ID証明書を利用できなかったため、現在のバイナリはアドホック署名されています。このリポジトリからダウンロードしたことを確認しても、macOSの隔離機能によってアプリを検証できない、または破損していると表示される場合は、隔離属性を削除してください。
 
@@ -51,7 +51,7 @@ xattr -dr com.apple.quarantine /Applications/OST.app
 リリースZIPのSHA-256はリリースワークフローで公開され、次のコマンドで比較できます。
 
 ```bash
-shasum -a 256 OST-0.3.0-macos-arm64.zip
+shasum -a 256 OST-0.3.1-macos-arm64.zip
 ```
 
 ## 文字起こしを開始する

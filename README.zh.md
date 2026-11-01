@@ -38,9 +38,9 @@ OST 是一款适用于 macOS 26 及更高版本的菜单栏应用。它可以转
 - macOS 26.0 或更高版本
 - Apple Silicon
 
-## 安装 0.3.0
+## 安装 0.3.1
 
-从 [v0.3.0 发布页面](https://github.com/9bow/OST/releases/tag/v0.3.0)下载 `OST-0.3.0-macos-arm64.zip`，解压后将 `OST.app` 移至“应用程序”文件夹。
+从 [v0.3.1 发布页面](https://github.com/9bow/OST/releases/tag/v0.3.1)下载 `OST-0.3.1-macos-arm64.zip`，解压后将 `OST.app` 移至“应用程序”文件夹。
 
 由于发布环境中没有 Developer ID 证书，当前二进制文件使用临时签名。如果确认应用是从本仓库下载的，但 macOS 隔离机制仍提示无法验证或应用已损坏，请移除隔离属性：
 
@@ -51,7 +51,7 @@ xattr -dr com.apple.quarantine /Applications/OST.app
 发布工作流会公布发行版 ZIP 文件的 SHA-256，可使用以下命令进行比较：
 
 ```bash
-shasum -a 256 OST-0.3.0-macos-arm64.zip
+shasum -a 256 OST-0.3.1-macos-arm64.zip
 ```
 
 ## 开始转录

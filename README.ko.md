@@ -38,9 +38,9 @@ OST는 macOS 26 이상에서 동작하는 메뉴 막대 앱으로, 시스템 오
 - macOS 26.0 이상
 - Apple Silicon
 
-## 0.3.0 설치
+## 0.3.1 설치
 
-[v0.3.0 릴리스](https://github.com/9bow/OST/releases/tag/v0.3.0)에서 `OST-0.3.0-macos-arm64.zip`을 다운로드해 압축을 풀고 `OST.app`을 응용 프로그램 폴더로 옮깁니다.
+[v0.3.1 릴리스](https://github.com/9bow/OST/releases/tag/v0.3.1)에서 `OST-0.3.1-macos-arm64.zip`을 다운로드해 압축을 풀고 `OST.app`을 응용 프로그램 폴더로 옮깁니다.
 
 릴리스 환경에서 Developer ID 인증서를 사용할 수 없어 현재 바이너리는 임시 서명되어 있습니다. 이 저장소에서 다운로드한 파일임을 확인한 뒤에도 macOS 격리 기능에서 앱을 확인할 수 없거나 손상되었다고 표시하면 다음 명령으로 격리 속성을 제거합니다.
 
@@ -51,7 +51,7 @@ xattr -dr com.apple.quarantine /Applications/OST.app
 릴리스 ZIP의 SHA-256은 릴리스 워크플로에서 게시하며 다음 명령으로 비교할 수 있습니다.
 
 ```bash
-shasum -a 256 OST-0.3.0-macos-arm64.zip
+shasum -a 256 OST-0.3.1-macos-arm64.zip
 ```
 
 ## 받아쓰기 시작

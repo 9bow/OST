@@ -90,6 +90,13 @@ struct SettingsView: View {
 
     private var generalTab: some View {
         Form {
+            LabeledContent(t("Version")) {
+                let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+                let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+                Text("\(version) (\(build))")
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("appVersion")
+            }
             Picker(t("App language"), selection: appDisplayLanguageBinding) {
                 ForEach(AppDisplayLanguage.allCases, id: \.self) { language in
                     Text(appLanguageName(language)).tag(language)

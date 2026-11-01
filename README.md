@@ -38,9 +38,9 @@ Internet access is used only when the user chooses to download an MLX model. The
 - macOS 26.0 or later
 - Apple Silicon
 
-## Install 0.3.0
+## Install 0.3.1
 
-Download `OST-0.3.0-macos-arm64.zip` from the [v0.3.0 release](https://github.com/9bow/OST/releases/tag/v0.3.0), extract it, and move `OST.app` to Applications.
+Download `OST-0.3.1-macos-arm64.zip` from the [v0.3.1 release](https://github.com/9bow/OST/releases/tag/v0.3.1), extract it, and move `OST.app` to Applications.
 
 The current binary is ad-hoc signed because a Developer ID certificate was not available in the release environment. If macOS quarantine reports that the app cannot be verified or is damaged, remove the quarantine attribute after confirming that you downloaded it from this repository:
 
@@ -51,7 +51,7 @@ xattr -dr com.apple.quarantine /Applications/OST.app
 The release ZIP SHA-256 is published by the release workflow and can be compared with:
 
 ```bash
-shasum -a 256 OST-0.3.0-macos-arm64.zip
+shasum -a 256 OST-0.3.1-macos-arm64.zip
 ```
 
 ## Start transcribing

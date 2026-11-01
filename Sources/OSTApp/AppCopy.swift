@@ -54,6 +54,7 @@ enum AppCopy {
     }
 
     private static let chinese: [String: String] = [
+        "Version": "版本",
         "Microphone": "麦克风",
         "Microphone input": "麦克风输入",
         "Off": "关闭",
@@ -104,6 +105,7 @@ enum AppCopy {
     ]
 
     private static let japanese: [String: String] = [
+        "Version": "バージョン",
         "Microphone": "マイク",
         "Microphone input": "マイク入力",
         "Off": "オフ",
@@ -154,6 +156,7 @@ enum AppCopy {
     ]
 
     private static let korean: [String: String] = [
+        "Version": "버전",
         "Microphone": "마이크",
         "Microphone input": "마이크 입력",
         "Off": "꺼짐",

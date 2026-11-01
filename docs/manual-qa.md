@@ -1,4 +1,4 @@
-# OST 0.3.0 Manual QA
+# OST 0.3.1 Manual QA
 
 Use this checklist for a release candidate built on macOS 26 or later on Apple Silicon.
 
@@ -17,7 +17,7 @@ Use this checklist for a release candidate built on macOS 26 or later on Apple S
 - Run `script/test.sh` and confirm the Xcode unit tests pass.
 - Run `script/verify_privacy.sh --static`.
 - Build the Release configuration for `platform=macOS,arch=arm64`.
-- Verify `CFBundleShortVersionString` is `0.3.0` and `CFBundleVersion` is `6`.
+- Verify `CFBundleShortVersionString` is `0.3.1` and `CFBundleVersion` is `7`.
 - Verify the app and embedded XPC with `codesign --verify --deep --strict`.
 - Confirm the main app has no network client entitlement and the downloader XPC does.
 
@@ -26,6 +26,7 @@ Use this checklist for a release candidate built on macOS 26 or later on Apple S
 - Launch the packaged app and confirm the OST icon appears in the menu bar without a Dock icon.
 - On a clean first launch, confirm the overlay is unlocked and can be moved or resized; after locking it, relaunch and confirm the saved lock choice is restored.
 - Choose **Settings…** and confirm the Settings window opens in front as the active key window.
+- Open Settings > General. Make sure that Version shows `0.3.1 (7)` and matches the app bundle.
 - Select an MLX transcription model that is not downloaded, start capture, and confirm macOS requests System Audio Capture permission before opening Model settings.
 - Switch to Apple Speech after selecting automatic input, then start capture and confirm the input is repaired to a fixed language instead of opening Model settings.
 - Deny permission and confirm OST shows a clear error and a button to open the relevant System Settings page.
@@ -74,6 +75,7 @@ Use this checklist for a release candidate built on macOS 26 or later on Apple S
 
 ## Microphone input
 
+- With no microphone connected, enable microphone input and start capture. Make sure that OST reports an unavailable microphone and stays open.
 - Start capture with Microphone input set to Off. Make sure that macOS does not request microphone permission.
 - Select Transcribe only in Settings > General > Microphone. Restart capture and grant microphone permission.
 - Play system audio and speak into the microphone. Make sure that both transcripts appear and only system audio receives translations.
@@ -108,7 +110,7 @@ Use this checklist for a release candidate built on macOS 26 or later on Apple S
 
 ## Packaging
 
-- Extract `OST-0.3.0-macos-arm64.zip` to a clean directory.
+- Extract `OST-0.3.1-macos-arm64.zip` to a clean directory.
 - Confirm the executable is arm64 and the app contains `en`, `zh-Hans`, `ja`, and `ko` resources.
 - Re-run strict code-sign verification on the extracted app.
 - Launch the extracted app. If quarantine blocks the ad-hoc build, follow the README note and record the exact Gatekeeper message.
