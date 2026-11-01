@@ -71,9 +71,12 @@ public actor MicrophoneCapture {
         }
         let engine = AVAudioEngine()
         let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0,
-              format.commonFormat == .pcmFormatFloat32,
+        let hardwareFormat = input.inputFormat(forBus: 0)
+        guard hardwareFormat.sampleRate > 0, hardwareFormat.channelCount > 0,
+              let format = AVAudioFormat(
+                standardFormatWithSampleRate: hardwareFormat.sampleRate,
+                channels: hardwareFormat.channelCount
+              ),
               let mono = AVAudioFormat(
                 commonFormat: .pcmFormatFloat32,
                 sampleRate: format.sampleRate,

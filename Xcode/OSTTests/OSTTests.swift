@@ -1,10 +1,67 @@
 import OSTCore
+import OSTPlatform
 @testable import OST
+import CoreAudio
 import Foundation
 import SwiftUI
 import XCTest
 
 final class OSTTests: XCTestCase {
+    func testMicrophoneCaptureWithCurrentHardware() async throws {
+        guard ProcessInfo.processInfo.environment["OST_TEST_MICROPHONE"] == "1" else {
+            throw XCTSkip("Set OST_TEST_MICROPHONE=1 to capture from the current microphone.")
+        }
+        let capture = MicrophoneCapture()
+        do {
+            var device = AudioObjectID(kAudioObjectUnknown)
+            var size = UInt32(MemoryLayout<AudioObjectID>.size)
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            let status = AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device
+            )
+            XCTAssertEqual(status, noErr)
+            guard status == noErr else { return }
+            if device == kAudioObjectUnknown {
+                do {
+                    _ = try await capture.start()
+                    XCTFail("Capture must report an unavailable microphone when no input device exists.")
+                } catch MicrophoneCaptureError.inputUnavailable {}
+                await capture.stop()
+                return
+            }
+            let audio = try await capture.start()
+            let chunks = try await withThrowingTaskGroup(of: [PCMChunk].self) { group in
+                group.addTask {
+                    var chunks: [PCMChunk] = []
+                    for await chunk in audio where !chunk.samples.isEmpty {
+                        chunks.append(chunk)
+                        if chunks.count == 3 { return chunks }
+                    }
+                    throw MicrophoneCaptureError.captureFailed
+                }
+                group.addTask {
+                    try await Task.sleep(for: .seconds(8))
+                    throw MicrophoneCaptureError.captureFailed
+                }
+                defer { group.cancelAll() }
+                let result = try await group.next()
+                return try XCTUnwrap(result)
+            }
+            XCTAssertEqual(chunks.count, 3)
+            XCTAssertTrue(chunks.allSatisfy { $0.sampleRate == 16_000 && $0.samples.allSatisfy { $0.isFinite } })
+            XCTAssertLessThan(chunks[0].startTime, chunks[1].startTime)
+            XCTAssertLessThan(chunks[1].startTime, chunks[2].startTime)
+            await capture.stop()
+        } catch {
+            await capture.stop()
+            throw error
+        }
+    }
+
     func testBundledCatalogIsValid() throws {
         let catalog = try ModelCatalog.bundled()
         XCTAssertEqual(catalog.models.count, 4)
